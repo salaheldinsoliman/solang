@@ -38,47 +38,49 @@ contract Array_bound_Test {
             b.push(true);
         }
 
-        //CHECK : return %array_size.temp.25
+        // CHECK: return %array_size.temp.25
         return b.length;
     }
 
-    // BEGIN_CHECK : function Array_bound_Test::Array_bound_Test::function::test_for_loop
+    // BEGIN_CHECK: function Array_bound_Test::Array_bound_Test::function::test_for_loop
     function test_for_loop() public {
         uint256[] a = new uint256[](20);
         a.push(1);
         uint256 sesa = 0;
 
-        // CHECK : branchcond (unsigned less %i < uint256 21), block1, block4
+        // CHECK: branchcond (unsigned less %i < uint256 21), block1, block4
         for (uint256 i = 0; i < a.length; i++) {
-            // CHECK : branchcond (uint32 20 >= uint32 21), block5, block6
+            // CHECK: branchcond (uint32 20 >= uint32 21), block5, block6
             sesa = sesa + a[20];
         }
 
         assert(sesa == 21);
     }
 
+    // BEGIN_CHECK: function Array_bound_Test::Array_bound_Test::function::test_without_size
     function test_without_size() public returns (uint32) {
         uint256[] vec;
         vec.push(3);
 
         uint256[] a = new uint256[](20);
 
-        // CHECK : return ((builtin ArrayLength (%vec)) + uint32 20)
+        // CHECK: return ((builtin ArrayLength (%vec)) + uint32 20)
         return vec.length + a.length;
     }
 
+    // BEGIN_CHECK: function Array_bound_Test::Array_bound_Test::function::test_loop_2
     function test_loop_2() public {
         int256[] vec = new int256[](10);
 
         for (int256 i = 0; i < 5; i++) {
-            //CHECK : branchcond (unsigned more %array_size.temp.33 > uint32 20), block5, block6
+            //CHECK: branchcond (unsigned more %array_size.temp.33 > uint32 20), block5, block6
             if (vec.length > 20) {
                 break;
             }
             vec.push(3);
         }
 
-        // CHECK : branchcond (%array_size.temp.33 == uint32 15), block7, block8
+        // CHECK: branchcond (%array_size.temp.33 == uint32 15), block7, block8
         assert(vec.length == 15);
     }
 }
