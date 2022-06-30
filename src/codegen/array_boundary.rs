@@ -18,7 +18,7 @@ pub(crate) fn modify_temp_array_size(
     vartab: &mut Vartable,
 ) {
     // If not empty
-    if let Some(to_add) = cfg.array_lengths_temps.get(&address_arr) {
+    if let Some(to_add) = cfg.clone().array_lengths_temps.get(&address_arr) {
         let add_expr = if minus {
             Expression::Subtract(
                 Loc::Codegen,
@@ -45,14 +45,14 @@ pub(crate) fn modify_temp_array_size(
             )
         };
 
-        //set instruction to add to the cfg
-        let set_ins = Instr::Set {
-            loc: Loc::Codegen,
-            res: to_add.0,
-            expr: add_expr,
-        };
-
-        //add instruction to the cfg
-        cfg.add(vartab, set_ins);
+        // Add instruction to the cfg
+        cfg.add(
+            vartab,
+            Instr::Set {
+                loc: Loc::Codegen,
+                res: to_add.0,
+                expr: add_expr,
+            },
+        );
     }
 }

@@ -1522,7 +1522,7 @@ fn expr_builtin(
             let buf = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
             let offset = expression(&args[2], cfg, contract_no, func, ns, vartab, opt);
 
-            //range check
+            // range check
             let cond = Expression::LessEqual(
                 *loc,
                 Box::new(Expression::Add(
@@ -1635,7 +1635,7 @@ fn expr_builtin(
                 // If an array length instruction is called
 
                 // Get the variable it is assigned with
-                if let Expression::Variable(_loc, _ty, num) = &arguments[0] {
+                if let Expression::Variable(_, _, num) = &arguments[0] {
                     // Now that we have its temp in the map, retrieve the temp var res from the map
                     if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
                         //if its there, replace ArrayLength with the temp var
@@ -2582,12 +2582,12 @@ fn array_subscript(
                         vec![array.clone()],
                     );
 
-                    if let Expression::Variable(loc, _ty, num) = array.clone() {
+                    if let Expression::Variable(loc, _, num) = &array {
                         // If the size is known aka in our cfg.array_length_map, do the replacement
 
-                        if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(&num) {
+                        if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
                             returned =
-                                Expression::Variable(loc, Type::Uint(32), array_size_unrwapped.0);
+                                Expression::Variable(*loc, Type::Uint(32), array_size_unrwapped.0);
                         }
                     }
                     returned

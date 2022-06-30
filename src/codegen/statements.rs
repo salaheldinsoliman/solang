@@ -80,11 +80,11 @@ pub(crate) fn statement(
             );
 
             // Lets check if the declaration is a declaration of a dynamic array
-            if let Expression::AllocDynamicArray(_loc, _ty, size, _option) = expr {
+            if let Expression::AllocDynamicArray(_, _, size, _) = expr {
                 // If its a variable of uint32, assign it to a temp
-                if let Expression::Variable(_loc, ref ty, position) = *size {
+                if let Expression::Variable(_, ref ty, position) = *size {
                     let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), position);
-                    let temp_res = vartab.temp_name("array_size", &ty);
+                    let temp_res = vartab.temp_name("array_size", ty);
                     cfg.add(
                         vartab,
                         Instr::Set {
@@ -97,8 +97,8 @@ pub(crate) fn statement(
                     cfg.array_lengths_temps.insert(*pos, (temp_res, num));
                 }
                 // If size a uint and bits > 32
-                else if let Expression::Trunc(_loc, ref _ty, ref index) = *size {
-                    if let Expression::Variable(_loc, _ty, index) = &**index {
+                else if let Expression::Trunc(_, _, ref index) = *size {
+                    if let Expression::Variable(_, _, index) = &**index {
                         //a number var holding array length
                         let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), *index);
                         let num_trunced =
@@ -117,7 +117,7 @@ pub(crate) fn statement(
                     }
                 }
                 // If the size is a number literal
-                else if let Expression::NumberLiteral(_loc, _ty, size_of_array) = *size {
+                else if let Expression::NumberLiteral(_, _, size_of_array) = *size {
                     //a number literal holding the array length
                     let num =
                         Expression::NumberLiteral(pt::Loc::Codegen, Type::Uint(32), size_of_array);

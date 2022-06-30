@@ -71,6 +71,7 @@ contract Array_bound_Test {
         int256[] vec = new int256[](10);
 
         for (int256 i = 0; i < 5; i++) {
+            //CHECK : branchcond (unsigned more %array_size.temp.33 > uint32 20), block5, block6
             if (vec.length > 20) {
                 break;
             }
