@@ -1521,6 +1521,8 @@ fn expr_builtin(
         | ast::Builtin::WriteUint256LE => {
             let buf = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
             let offset = expression(&args[2], cfg, contract_no, func, ns, vartab, opt);
+
+            //range check
             let cond = Expression::LessEqual(
                 *loc,
                 Box::new(Expression::Add(
@@ -1621,7 +1623,6 @@ fn expr_builtin(
             Expression::Builtin(*loc, tys.to_vec(), builtin.into(), vec![buf, offset])
         }
         _ => {
-            let locc = *loc;
             let arguments: Vec<Expression> = args
                 .iter()
                 .map(|v| expression(v, cfg, contract_no, func, ns, vartab, opt))
@@ -1630,25 +1631,16 @@ fn expr_builtin(
             let mut returned =
                 Expression::Builtin(*loc, tys.to_vec(), builtin.into(), arguments.clone());
 
-            if !arguments.is_empty() {
-                //if an array length instruction is called
-                if builtin == &ast::Builtin::ArrayLength {
-                    //get the variable it is assigned with
-                    if let Expression::Variable(_loc, _ty, num) = &arguments[0] {
-                        //now that we have its temp in the map, retrieve the temp var res frok the map
-                        let array_size_var = cfg.array_lengths_temps.get(num);
+            if !arguments.is_empty() && builtin == &ast::Builtin::ArrayLength {
+                // If an array length instruction is called
 
-                        if let Some(..) = array_size_var {
-                            //if its there, replace ArrayLength with the temp var
-                            let varr = Expression::Variable(
-                                locc,
-                                Type::Uint(32),
-                                array_size_var.unwrap().clone().0,
-                            );
-
-                            //assign the return of the match statement to the temp var
-                            returned = varr;
-                        }
+                // Get the variable it is assigned with
+                if let Expression::Variable(_loc, _ty, num) = &arguments[0] {
+                    // Now that we have its temp in the map, retrieve the temp var res from the map
+                    if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
+                        //if its there, replace ArrayLength with the temp var
+                        returned =
+                            Expression::Variable(*loc, Type::Uint(32), array_size_unrwapped.0);
                     }
                 }
             }
@@ -2591,17 +2583,11 @@ fn array_subscript(
                     );
 
                     if let Expression::Variable(loc, _ty, num) = array.clone() {
-                        // if the size is known aka in our map, do the replacement
-                        let array_size_var = cfg.array_lengths_temps.get(&num);
-                        if let Some(..) = array_size_var {
-                            let varr = Expression::Variable(
-                                loc,
-                                Type::Uint(32),
-                                array_size_var.unwrap().clone().0,
-                            );
+                        // If the size is known aka in our cfg.array_length_map, do the replacement
 
-                            //assign returned to the temp var
-                            returned = varr;
+                        if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(&num) {
+                            returned =
+                                Expression::Variable(loc, Type::Uint(32), array_size_unrwapped.0);
                         }
                     }
                     returned

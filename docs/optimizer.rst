@@ -194,10 +194,8 @@ this contract and check the CFG, using `solang --emit cfg`.
 Array Boundary checking optimizations
 ---------------------------------
 
-When an array boundary check is needed, solang first used an Array Length expression. An array length expression is translated,under the hood, to multiple
-LLVM-IR instructions that are at most timee expensive and not needed (if the the dynamic array size is known).
-This optimization is done through inserting temporary variables that hold array lengths, and updating the temps in pops and pushes and uses them whenevr needed.
-this optimization is done for dynamic arrays allocated with constants or variables
+When an array boundary check is needed, Solang calls a builtin ArrayLength function, which is translated, under the hood, to multiple LLVM-IR instructions that are expensive and unnecessary if the array's size is known.
+This optimization is done by inserting temporary variables to hold array lengths, and updating them during array pops and pushes. It works for dynamic arrays allocated with constant or variable size.
 
 
 Check out the example below.
@@ -219,5 +217,6 @@ Check out the example below.
     }
 
 
-Here, we have a for loop that will be run for 21 times. why do we calculate array length for 21 times (for the loop bound) + 21 times (for the a[20 expression]).
-Instead, we use a temp variable 
+Here, we have a for loop that will be run for 21 times. What will be needed here is to calcualte the array length for 21(for the loop boundary)+21(for a[20] expression) times, 
+Instead, we introudce a temporary variable to hold the array length. this variable will be incremented after the push in line 2 to hold the value 21.
+Therefore, array and loop boundary checks will be comparisons between number literals which are a lot cheaper than calculating array length each time.
