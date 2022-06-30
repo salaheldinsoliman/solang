@@ -176,7 +176,7 @@ return 3;
     function test14() public returns (int) {
         int[] storage ptrArr = testArr;
 
-// CHECK: store storage slot(%temp.97) ty:int256 storage = int256 3
+// CHECK: store storage slot(%temp.98) ty:int256 storage = int256 3
         ptrArr.push(3);
 
         return ptrArr[0];

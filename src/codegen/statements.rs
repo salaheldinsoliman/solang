@@ -63,21 +63,84 @@ pub(crate) fn statement(
                     vartab,
                     opt,
                 };
-
                 //If we remove the assignment, we must keep expressions that have side effects
                 init.recurse(&mut params, process_side_effects_expressions);
                 return;
             }
 
             let expr = expression(init, cfg, contract_no, Some(func), ns, vartab, opt);
+
+            let location = *loc;
+            let pos = *pos;
+
             cfg.add(
                 vartab,
                 Instr::Set {
-                    loc: *loc,
-                    res: *pos,
-                    expr,
+                    loc: location,
+                    res: pos,
+                    expr: expr.clone(),
                 },
             );
+
+            //Lets check if the declaration is a declaration of a dynamic array
+            if let Expression::AllocDynamicArray(_loc, _ty, size, _option) = expr {
+                //get the size expression: numberLiteral/variable/Cast
+                let size_unboxed = *size;
+
+                //if its a variable of uint32, assign it to a temp
+                if let Expression::Variable(_loc, ty, position) = size_unboxed.clone() {
+                    let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), position);
+                    let temp_res = vartab.temp_name("array_size", &ty);
+                    cfg.add(
+                        vartab,
+                        Instr::Set {
+                            loc: location,
+                            res: temp_res,
+                            expr: num.clone(),
+                        },
+                    );
+
+                    cfg.array_lengths_temps.insert(pos, (temp_res, num));
+                }
+
+                //if size a uint and bits > 32
+                if let Expression::Trunc(_loc, _ty, index) = size_unboxed.clone() {
+                    let array_size = *index;
+                    if let Expression::Variable(_loc, _ty, index) = array_size {
+                        //a number var holding array length
+                        let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), index);
+                        let num_trunced =
+                            Expression::Trunc(pt::Loc::Codegen, Type::Uint(32), Box::new(num));
+                        let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+                        cfg.add(
+                            vartab,
+                            Instr::Set {
+                                loc: location,
+                                res: temp_res,
+                                expr: num_trunced.clone(),
+                            },
+                        );
+                        cfg.array_lengths_temps.insert(pos, (temp_res, num_trunced));
+                    }
+                }
+
+                //if the size is a number literal
+                if let Expression::NumberLiteral(_loc, _ty, size_of_array) = size_unboxed {
+                    //a number literal holding the array length
+                    let num =
+                        Expression::NumberLiteral(pt::Loc::Codegen, Type::Uint(32), size_of_array);
+                    let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+                    cfg.add(
+                        vartab,
+                        Instr::Set {
+                            loc: location,
+                            res: temp_res,
+                            expr: num.clone(),
+                        },
+                    );
+                    cfg.array_lengths_temps.insert(pos, (temp_res, num));
+                }
+            }
         }
         Statement::VariableDecl(loc, pos, param, None) => {
             if should_remove_variable(pos, func, opt) {

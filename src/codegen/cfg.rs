@@ -4,6 +4,7 @@ use std::str;
 use std::sync::Arc;
 use std::{fmt, fmt::Write};
 
+use super::array_boundary::ArrayTempVars;
 use super::statements::{statement, LoopScopes};
 use super::{
     constant_folding, dead_storage,
@@ -337,6 +338,7 @@ pub struct ControlFlowGraph {
     pub ty: pt::FunctionTy,
     pub selector: u32,
     current: usize,
+    pub array_lengths_temps: ArrayTempVars, //a new member in the cfg that track the temp vars of arrays
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -360,6 +362,7 @@ impl ControlFlowGraph {
             ty: pt::FunctionTy::Function,
             selector: 0,
             current: 0,
+            array_lengths_temps: IndexMap::new(),
         };
 
         cfg.new_basic_block("entry".to_string());
@@ -381,6 +384,7 @@ impl ControlFlowGraph {
             ty: pt::FunctionTy::Function,
             selector: 0,
             current: 0,
+            array_lengths_temps: IndexMap::new(),
         }
     }
 

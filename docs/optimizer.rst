@@ -186,3 +186,38 @@ Check out the example below. It contains multiple common subexpressions:
 The expression `a*b` is repeated throughout the function and will be saved to a temporary variable.
 This temporary will be placed wherever there is an expression `a*b`. You can see the pass in action when you compile
 this contract and check the CFG, using `solang --emit cfg`.
+
+
+
+.. _Array-Boundary-checking-optimizations
+
+Array Boundary checking optimizations
+---------------------------------
+
+When an array boundary check is needed, solang first used an Array Length expression. An array length expression is translated,under the hood, to multiple
+LLVM-IR instructions that are at most timee expensive and not needed (if the the dynamic array size is known).
+This optimization is done through inserting temporary variables that hold array lengths, and updating the temps in pops and pushes and uses them whenevr needed.
+this optimization is done for dynamic arrays allocated with constants or variables
+
+
+Check out the example below.
+
+.. code-block:: solidity
+
+    contract c {
+        function test_for_loop() public returns (uint) {
+            uint256[] a = new uint256[](20);
+            a.push(1);
+            uint sum = 0;
+
+            for (uint i = 0; i < a.length; i++) {
+                sum = sum + a[20];
+            }
+
+            return sum;
+        }
+    }
+
+
+Here, we have a for loop that will be run for 21 times. why do we calculate array length for 21 times (for the loop bound) + 21 times (for the a[20 expression]).
+Instead, we use a temp variable 

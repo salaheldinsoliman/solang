@@ -6,6 +6,7 @@ use super::{
     cfg::{ControlFlowGraph, Instr, InternalCallTy},
     vartable::Vartable,
 };
+use crate::codegen::array_boundary::modify_temp_array_size;
 use crate::codegen::unused_variable::should_remove_assignment;
 use crate::codegen::{Builtin, Expression};
 use crate::sema::ast;
@@ -637,6 +638,7 @@ pub fn expression(
                         array: address_arr,
                     },
                 );
+                modify_temp_array_size(cfg, true, address_arr, vartab);
 
                 Expression::Variable(*loc, ty[0].clone(), address_res)
             }
@@ -780,6 +782,8 @@ fn memory_array_push(
             value: Box::new(value),
         },
     );
+    modify_temp_array_size(cfg, false, address_arr, vartab);
+
     Expression::Variable(*loc, ty.clone(), address_res)
 }
 
@@ -1517,8 +1521,6 @@ fn expr_builtin(
         | ast::Builtin::WriteUint256LE => {
             let buf = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
             let offset = expression(&args[2], cfg, contract_no, func, ns, vartab, opt);
-
-            // range check
             let cond = Expression::LessEqual(
                 *loc,
                 Box::new(Expression::Add(
@@ -1619,12 +1621,38 @@ fn expr_builtin(
             Expression::Builtin(*loc, tys.to_vec(), builtin.into(), vec![buf, offset])
         }
         _ => {
-            let args = args
+            let locc = *loc;
+            let arguments: Vec<Expression> = args
                 .iter()
                 .map(|v| expression(v, cfg, contract_no, func, ns, vartab, opt))
                 .collect();
 
-            Expression::Builtin(*loc, tys.to_vec(), builtin.into(), args)
+            let mut returned =
+                Expression::Builtin(*loc, tys.to_vec(), builtin.into(), arguments.clone());
+
+            if !arguments.is_empty() {
+                //if an array length instruction is called
+                if builtin == &ast::Builtin::ArrayLength {
+                    //get the variable it is assigned with
+                    if let Expression::Variable(_loc, _ty, num) = &arguments[0] {
+                        //now that we have its temp in the map, retrieve the temp var res frok the map
+                        let array_size_var = cfg.array_lengths_temps.get(num);
+
+                        if let Some(..) = array_size_var {
+                            //if its there, replace ArrayLength with the temp var
+                            let varr = Expression::Variable(
+                                locc,
+                                Type::Uint(32),
+                                array_size_var.unwrap().clone().0,
+                            );
+
+                            //assign the return of the match statement to the temp var
+                            returned = varr;
+                        }
+                    }
+                }
+            }
+            returned
         }
     }
 }
@@ -2552,12 +2580,31 @@ fn array_subscript(
                         array_length
                     }
                 } else {
-                    Expression::Builtin(
+                    //if a subscript is encountered array length will be called
+
+                    //return array length by default
+                    let mut returned = Expression::Builtin(
                         *loc,
                         vec![Type::Uint(32)],
                         Builtin::ArrayLength,
                         vec![array.clone()],
-                    )
+                    );
+
+                    if let Expression::Variable(loc, _ty, num) = array.clone() {
+                        // if the size is known aka in our map, do the replacement
+                        let array_size_var = cfg.array_lengths_temps.get(&num);
+                        if let Some(..) = array_size_var {
+                            let varr = Expression::Variable(
+                                loc,
+                                Type::Uint(32),
+                                array_size_var.unwrap().clone().0,
+                            );
+
+                            //assign returned to the temp var
+                            returned = varr;
+                        }
+                    }
+                    returned
                 }
             }
             Some(l) => {
