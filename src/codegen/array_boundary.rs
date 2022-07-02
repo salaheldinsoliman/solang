@@ -108,10 +108,26 @@ pub(crate) fn handle_array_assign(
         // If size a uint and bits > 32
         else if let ast::Expression::Trunc(_, _, ref index) = **size {
             if let ast::Expression::Variable(_, _, index) = &**index {
-                //a number var holding array length
+                // A number var holding array length
                 let num = Expression::Variable(Loc::Codegen, Type::Uint(32), *index);
                 let num_trunced = Expression::Trunc(Loc::Codegen, Type::Uint(32), Box::new(num));
-                //let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+
+                cfg.add(
+                    vartab,
+                    Instr::Set {
+                        loc: Loc::Codegen,
+                        res: a,
+                        expr: num_trunced,
+                    },
+                );
+                cfg.array_lengths_temps.insert(*pos, a);
+            }
+        } else if let ast::Expression::ZeroExt(_, _, ref index) = **size {
+            if let ast::Expression::Variable(_, _, index) = &**index {
+                // A number var holding array length
+                let num = Expression::Variable(Loc::Codegen, Type::Uint(32), *index);
+                let num_trunced = Expression::ZeroExt(Loc::Codegen, Type::Uint(32), Box::new(num));
+
                 cfg.add(
                     vartab,
                     Instr::Set {
@@ -128,7 +144,7 @@ pub(crate) fn handle_array_assign(
             //a number literal holding the array length
             let num =
                 Expression::NumberLiteral(Loc::Codegen, Type::Uint(32), size_of_array.clone());
-            //let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+            // let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
             cfg.add(
                 vartab,
                 Instr::Set {
