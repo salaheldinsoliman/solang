@@ -169,14 +169,14 @@ contract testing {
             // CHECK: ty:int32 %k = (trunc int32 ((zext uint256 (arg #0)) + uint256 2))
             let k : s32 := add(a, 2)
 
-            // CHECK: %ret.temp.58 = call testing::yul_function_0::get (sext uint256 (trunc int32 ((zext uint256 (arg #0)) + uint256 2)))
+            // CHECK: %ret.temp.60 = call testing::yul_function_0::get (sext uint256 (trunc int32 ((zext uint256 (arg #0)) + uint256 2)))
             let x := get(k)
-            // CHECK: ty:uint256 %x = %ret.temp.58
+            // CHECK: ty:uint256 %x = %ret.temp.60
 
-            // CHECK: %ret1.temp.59, %ret2.temp.60 = call testing::yul_function_2::multipleReturns %x, (trunc int32 ((zext uint256 (arg #0)) + uint256 2))
+            // CHECK: %ret1.temp.61, %ret2.temp.62 = call testing::yul_function_2::multipleReturns %x, (trunc int32 ((zext uint256 (arg #0)) + uint256 2))
             let l, m := multipleReturns(x, k)
-            // CHECK: ty:uint256 %l = (zext uint256 %ret1.temp.59)
-            // CHECK: ty:uint256 %m = (sext uint256 %ret2.temp.60)
+            // CHECK: ty:uint256 %l = (zext uint256 %ret1.temp.61)
+            // CHECK: ty:uint256 %m = (sext uint256 %ret2.temp.62)
 
 
             // CHECK: = call testing::yul_function_1::doSmth

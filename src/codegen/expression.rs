@@ -1628,7 +1628,7 @@ fn expr_builtin(
                 .map(|v| expression(v, cfg, contract_no, func, ns, vartab, opt))
                 .collect();
 
-            let mut returned =
+            /*let mut returned =
                 Expression::Builtin(*loc, tys.to_vec(), builtin.into(), arguments.clone());
 
             if !arguments.is_empty() && builtin == &ast::Builtin::ArrayLength {
@@ -1640,11 +1640,23 @@ fn expr_builtin(
                     if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
                         //if its there, replace ArrayLength with the temp var
                         returned =
-                            Expression::Variable(*loc, Type::Uint(32), array_size_unrwapped.0);
+                            Expression::Variable(*loc, Type::Uint(32), *array_size_unrwapped);
                     }
                 }
             }
-            returned
+            returned*/
+            if !arguments.is_empty() && builtin == &ast::Builtin::ArrayLength {
+                // If an array length instruction is called
+                // Get the variable it is assigned with
+                if let Expression::Variable(_, _, num) = &arguments[0] {
+                    // Now that we have its temp in the map, retrieve the temp var res from the map
+                    if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
+                        //if its there, replace ArrayLength with the temp var
+                        return Expression::Variable(*loc, Type::Uint(32), *array_size_unrwapped);
+                    }
+                }
+            }
+            Expression::Builtin(*loc, tys.to_vec(), builtin.into(), arguments)
         }
     }
 }
@@ -2587,7 +2599,7 @@ fn array_subscript(
 
                         if let Some(array_size_unrwapped) = cfg.array_lengths_temps.get(num) {
                             returned =
-                                Expression::Variable(*loc, Type::Uint(32), array_size_unrwapped.0);
+                                Expression::Variable(*loc, Type::Uint(32), *array_size_unrwapped);
                         }
                     }
                     returned

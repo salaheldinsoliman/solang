@@ -8,6 +8,7 @@ use super::{
     vartable::Vartable,
 };
 use crate::ast;
+use crate::codegen::array_boundary::handle_array_assign;
 use crate::codegen::unused_variable::{
     should_remove_assignment, should_remove_variable, SideEffectsCheckParameters,
 };
@@ -80,7 +81,7 @@ pub(crate) fn statement(
             );
 
             // Lets check if the declaration is a declaration of a dynamic array
-            if let Expression::AllocDynamicArray(_, _, size, _) = expr {
+            if let Expression::AllocDynamicArray(_, _, size, _) = expr.clone() {
                 // If its a variable of uint32, assign it to a temp
                 if let Expression::Variable(_, ref ty, position) = *size {
                     let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), position);
@@ -90,11 +91,11 @@ pub(crate) fn statement(
                         Instr::Set {
                             loc: *loc,
                             res: temp_res,
-                            expr: num.clone(),
+                            expr: num,
                         },
                     );
 
-                    cfg.array_lengths_temps.insert(*pos, (temp_res, num));
+                    cfg.array_lengths_temps.insert(*pos, temp_res);
                 }
                 // If size a uint and bits > 32
                 else if let Expression::Trunc(_, _, ref index) = *size {
@@ -109,11 +110,29 @@ pub(crate) fn statement(
                             Instr::Set {
                                 loc: *loc,
                                 res: temp_res,
-                                expr: num_trunced.clone(),
+                                expr: num_trunced,
                             },
                         );
-                        cfg.array_lengths_temps
-                            .insert(*pos, (temp_res, num_trunced));
+                        cfg.array_lengths_temps.insert(*pos, temp_res);
+                    }
+                }
+                // If size is a uint and bits < 32
+                else if let Expression::ZeroExt(_, _, ref index) = *size {
+                    if let Expression::Variable(_, _, index) = &**index {
+                        //a number var holding array length
+                        let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), *index);
+                        let num_trunced =
+                            Expression::ZeroExt(pt::Loc::Codegen, Type::Uint(32), Box::new(num));
+                        let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+                        cfg.add(
+                            vartab,
+                            Instr::Set {
+                                loc: *loc,
+                                res: temp_res,
+                                expr: num_trunced,
+                            },
+                        );
+                        cfg.array_lengths_temps.insert(*pos, temp_res);
                     }
                 }
                 // If the size is a number literal
@@ -127,10 +146,25 @@ pub(crate) fn statement(
                         Instr::Set {
                             loc: *loc,
                             res: temp_res,
-                            expr: num.clone(),
+                            expr: num,
                         },
                     );
-                    cfg.array_lengths_temps.insert(*pos, (temp_res, num));
+                    cfg.array_lengths_temps.insert(*pos, temp_res);
+                }
+            } else if let Expression::Variable(_, _, res) = expr {
+                if let Some(to_add) = cfg.array_lengths_temps.clone().get(&res) {
+                    let num = Expression::Variable(pt::Loc::Codegen, Type::Uint(32), *to_add);
+                    let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+                    cfg.add(
+                        vartab,
+                        Instr::Set {
+                            loc: *loc,
+                            res: temp_res,
+                            expr: num,
+                        },
+                    );
+
+                    cfg.array_lengths_temps.insert(*pos, temp_res);
                 }
             }
         }
@@ -148,6 +182,22 @@ pub(crate) fn statement(
                     expr: Expression::Undefined(param.ty.clone()),
                 },
             );
+            // handling arrays without size, defaulting the initial size with zero
+
+            if let Type::Array(_, _) = param.ty {
+                let num =
+                    Expression::NumberLiteral(pt::Loc::Codegen, Type::Uint(32), BigInt::zero());
+                let temp_res = vartab.temp_name("array_size", &Type::Uint(32));
+                cfg.add(
+                    vartab,
+                    Instr::Set {
+                        loc: *loc,
+                        res: temp_res,
+                        expr: num,
+                    },
+                );
+                cfg.array_lengths_temps.insert(*pos, temp_res);
+            }
         }
         Statement::Return(_, expr) => {
             if let Some(return_instr) = return_override {
@@ -161,6 +211,12 @@ pub(crate) fn statement(
         }
         Statement::Expression(_, reachable, expr) => {
             if let ast::Expression::Assign(_, _, left, right) = &expr {
+                // If the left operand is a variable of type Array
+                if let ast::Expression::Variable(_, Type::Array(_, _), pos) = &**left {
+                    // Call a helper function thatn handles updating the temp var
+                    handle_array_assign(right, cfg, vartab, pos);
+                }
+
                 if should_remove_assignment(ns, left, func, opt) {
                     let mut params = SideEffectsCheckParameters {
                         cfg,
@@ -175,6 +231,7 @@ pub(crate) fn statement(
                     if !reachable {
                         cfg.add(vartab, Instr::Unreachable);
                     }
+
                     return;
                 }
             }

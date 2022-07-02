@@ -220,4 +220,4 @@ Check out the example below.
 Here, we have a for loop that runs for 21 iterations. In each iteration, we need to calcule the length of the array two times: the first for the loop boundary and the second for the array boundary check.
 that is a total of 42 calculations for the array length.
 Instead, we introudce a temporary variable to hold the array length. this variable will be incremented after the push in line 2 to hold the value 21.
-Therefore, array and loop boundary checks will be comparisons between number literals, which are a lot cheaper than calculating array length each time.
+Therefore, array and loop boundary checks will be comparisons between number literals, which are a lot cheaper than retrieving the array length each time.
