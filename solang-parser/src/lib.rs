@@ -2,8 +2,10 @@
 
 use crate::pt::CodeLocation;
 use lalrpop_util::ParseError;
+use lalrpop_util::ErrorRecovery;
 
 pub use diagnostics::Diagnostic;
+use crate::lexer::{Token, LexicalError};
 
 pub mod diagnostics;
 pub mod lexer;
@@ -25,8 +27,10 @@ pub fn parse(
     let mut comments = Vec::new();
 
     let lex = lexer::Lexer::new(src, file_no, &mut comments);
+    let mut my_errors= Vec::new();
+    let s = solidity::SourceUnitParser::new().parse(src, file_no,&mut my_errors, lex);
 
-    let s = solidity::SourceUnitParser::new().parse(src, file_no, lex);
+    println!("SS {:?}",my_errors);
 
     if let Err(e) = s {
         let errors = vec![match e {
@@ -37,14 +41,18 @@ pub fn parse(
             ParseError::UnrecognizedToken {
                 token: (l, token, r),
                 expected,
-            } => Diagnostic::parser_error(
+            } => 
+            {
+                println!("yarab {:?}",token);
+                
+                Diagnostic::parser_error(
                 pt::Loc::File(file_no, l, r),
                 format!(
                     "unrecognised token '{}', expected {}",
                     token,
                     expected.join(", ")
                 ),
-            ),
+            )},
             ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string()),
             ParseError::ExtraToken { token } => Diagnostic::parser_error(
                 pt::Loc::File(file_no, token.0, token.2),
@@ -55,7 +63,7 @@ pub fn parse(
                 format!("unexpected end of file, expecting {}", expected.join(", ")),
             ),
         }];
-
+        println!("ERRORS {:?}", errors);
         Err(errors)
     } else {
         Ok((s.unwrap(), comments))

@@ -261,7 +261,12 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Import => write!(f, "import"),
             Token::Struct => write!(f, "struct"),
             Token::Event => write!(f, "event"),
-            Token::Error => write!(f, "error"),
+            Token::Error => {
+                
+                
+                
+                write!(f, "error")},
+            
             Token::Enum => write!(f, "enum"),
             Token::Type => write!(f, "type"),
             Token::Memory => write!(f, "memory"),
@@ -334,7 +339,7 @@ pub struct Lexer<'input> {
     chars: PeekNth<CharIndices<'input>>,
     comments: &'input mut Vec<Comment>,
     file_no: usize,
-    last_tokens: [Option<Token<'input>>; 2],
+    pub last_tokens: [Option<Token<'input>>; 2],
 }
 
 #[derive(Debug, PartialEq)]

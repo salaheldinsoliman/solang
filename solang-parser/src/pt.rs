@@ -147,6 +147,7 @@ pub enum SourceUnitPart {
     DocComment(DocComment),
     Using(Box<Using>),
     StraySemicolon(Loc),
+    Error
 }
 
 #[derive(Debug, PartialEq, Clone)]

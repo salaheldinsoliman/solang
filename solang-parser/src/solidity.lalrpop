@@ -2,8 +2,11 @@ use lalrpop_util::ParseError;
 use super::pt::*;
 use super::box_option;
 use super::lexer::{Token, LexicalError};
+use lalrpop_util::ErrorRecovery;
 
-grammar<'input>(input: &'input str, file_no: usize);
+grammar<'input , 'err>(input: &'input str, file_no: usize , my_errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, LexicalError>>);
+//grammar<'err>(errors: &'err mut Vec<ErrorRecovery<usize, Token<'input>, &'static str>>);
+
 
 pub SourceUnit: SourceUnit = {
     SourceUnitPart* => SourceUnit(<>)
@@ -25,6 +28,7 @@ SourceUnitPart: SourceUnitPart = {
         SourceUnitPart::DocComment(DocComment { loc: Loc::File(file_no, l, r), ty: c.0, comment: c.1.to_string()})
     },
     <l:@L> ";" <r:@R> => SourceUnitPart::StraySemicolon(Loc::File(file_no, l, r)),
+    ! => { my_errors.push(<>); SourceUnitPart::Error },
 }
 
 ImportDirective: SourceUnitPart = {
