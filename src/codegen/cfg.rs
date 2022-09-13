@@ -351,7 +351,7 @@ pub struct BasicBlock {
 
 /// This enum saves information about the origin of each instruction. They can originate from
 /// Solidity code, Yul code or during code generation.
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InstrOrigin {
     Solidity,
     Yul,

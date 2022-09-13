@@ -1518,59 +1518,13 @@ pub fn bigint_to_expression(
                     format!("expected '{}', found integer", resolve_to.to_string(ns)),
                 ));
                 return Err(());
-            }
-
-            let permitted_bits = if resolve_to.is_signed_int() {
-                resolve_to.bits(ns) as u64 - 1
             } else {
-                resolve_to.bits(ns) as u64
-            };
-
-            return if n.sign() == Sign::Minus {
-                if !resolve_to.is_signed_int() {
-                    diagnostics.push(Diagnostic::cast_error(
-                        *loc,
-                        format!(
-                            "negative literal {} not allowed for unsigned type '{}'",
-                            n,
-                            resolve_to.to_string(ns)
-                        ),
-                    ));
-                    Err(())
-                } else if n.add(1u32).bits() > permitted_bits {
-                    diagnostics.push(Diagnostic::cast_error(
-                        *loc,
-                        format!(
-                            "literal {} is too large to fit into type '{}'",
-                            n,
-                            resolve_to.to_string(ns)
-                        ),
-                    ));
-                    Err(())
-                } else {
-                    Ok(Expression::NumberLiteral(
-                        *loc,
-                        resolve_to.clone(),
-                        n.clone(),
-                    ))
-                }
-            } else if bits > permitted_bits {
-                diagnostics.push(Diagnostic::cast_error(
-                    *loc,
-                    format!(
-                        "literal {} is too large to fit into type '{}'",
-                        n,
-                        resolve_to.to_string(ns)
-                    ),
-                ));
-                Err(())
-            } else {
-                Ok(Expression::NumberLiteral(
+                return Ok(Expression::NumberLiteral(
                     *loc,
                     resolve_to.clone(),
                     n.clone(),
-                ))
-            };
+                ));
+            }
         }
     }
 
