@@ -342,7 +342,7 @@ fn expression(
     cfg: &ControlFlowGraph,
     ns: &mut Namespace,
     instr_origin: InstrOrigin,
-) -> (Expression, bool) {
+) -> (Expression, bool, BigInt) {
     match expr {
         Expression::Add(loc, ty, unchecked, left, right) => {
             let left = expression(left, vars, cfg, ns, instr_origin);
@@ -1161,7 +1161,7 @@ fn expression(
     }
 }
 
-fn bigint_to_expression(instr_origin: InstrOrigin, loc: &Loc, ty: &Type, n: BigInt, ns: &mut Namespace) -> (Expression, bool) {
+fn bigint_to_expression(instr_origin: InstrOrigin, loc: &Loc, ty: &Type, n: BigInt, ns: &mut Namespace) -> (Expression, bool, BigInt) {
     println! {"FINAL : {:?} ", n};
     if instr_origin == InstrOrigin::Solidity {
     overflow_check(ns, n.clone(), ty.clone(), *loc);
@@ -1191,7 +1191,7 @@ fn bigint_to_expression(instr_origin: InstrOrigin, loc: &Loc, ty: &Type, n: BigI
         _ => unreachable!(),
     };
 
-    (Expression::NumberLiteral(*loc, ty.clone(), n), true)
+    (Expression::NumberLiteral(*loc, ty.clone(), n), true, n)
 }
 
 fn get_definition<'a>(
