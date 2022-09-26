@@ -216,7 +216,7 @@ fn eval_constants_in_expression(
                 (&left, &right)
             {
                 results.push(left.add(right));
-                bigint_to_expression(loc, ty, left.add(right))
+                Expression::NumberLiteral(*loc, ty.clone(), left.add(right))
             } else {
                 Expression::Add(
                     *loc,
@@ -235,7 +235,7 @@ fn eval_constants_in_expression(
                 (&left, &right)
             {
                 results.push(left.sub(right));
-                bigint_to_expression(loc, ty, left.sub(right))
+                Expression::NumberLiteral(*loc, ty.clone(), left.sub(right))
             } else {
                 Expression::Subtract(
                     *loc,
@@ -255,7 +255,7 @@ fn eval_constants_in_expression(
                 (&left, &right)
             {
                 results.push(left.mul(right.to_u32().unwrap()));
-                bigint_to_expression(loc, ty, left.mul(right.to_u32().unwrap()))
+                Expression::NumberLiteral(*loc, ty.clone(), left.mul(right.to_u32().unwrap()))
             } else {
                 Expression::Multiply(
                     *loc,
@@ -275,7 +275,7 @@ fn eval_constants_in_expression(
                 (&left, &right)
             {
                 results.push(left.pow(right.to_u32().unwrap()));
-                bigint_to_expression(loc, ty, left.pow(right.to_u32().unwrap()))
+                Expression::NumberLiteral(*loc, ty.clone(), left.pow(right.to_u32().unwrap()))
             } else {
                 Expression::Power(
                     *loc,
@@ -295,7 +295,7 @@ fn eval_constants_in_expression(
                 (&left, &right)
             {
                 results.push(left.shl(right.to_u32().unwrap()));
-                bigint_to_expression(loc, ty, left.shl(right.to_u32().unwrap()))
+                Expression::NumberLiteral(*loc, ty.clone(), left.shl(right.to_u32().unwrap()))
             } else {
                 Expression::ShiftLeft(*loc, ty.clone(), Box::new(left), Box::new(right))
             }
@@ -308,8 +308,8 @@ fn eval_constants_in_expression(
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
             {
-                results.push(left.shl(right.to_u32().unwrap()));
-                bigint_to_expression(loc, ty, left.shr(right.to_u32().unwrap()))
+                results.push(left.shr(right.to_u32().unwrap()));
+                Expression::NumberLiteral(*loc, ty.clone(), left.shr(right.to_u32().unwrap()))
             } else {
                 Expression::ShiftLeft(*loc, ty.clone(), Box::new(left), Box::new(right))
             }
@@ -337,10 +337,6 @@ fn eval_constants_in_expression(
         }
         _ => expr.clone(),
     }
-}
-
-fn bigint_to_expression(loc: &Loc, ty: &Type, n: BigInt) -> Expression {
-    Expression::NumberLiteral(*loc, ty.clone(), n)
 }
 
 fn overflow_check(ns: &mut Namespace, result: BigInt, ty: Type, loc: Loc) {
