@@ -10,6 +10,11 @@ use num_traits::Zero;
 use super::ast::{Diagnostic, Expression, Namespace};
 use solang_parser::pt;
 use solang_parser::pt::CodeLocation;
+use std::ops::{Add, Mul, Shl, Shr, Sub};
+
+use crate::sema::ast::RetrieveType;
+use crate::sema::ast::Type;
+use solang_parser::pt::Loc;
 
 /// Resolve an expression where a compile-time constant is expected
 pub fn eval_const_number(
@@ -194,5 +199,192 @@ pub fn eval_const_rational(
             expr.loc(),
             "expression not allowed in constant rational number expression".to_string(),
         )),
+    }
+}
+
+fn eval_constants_in_expression(
+    expr: &Expression,
+    ns: &mut Namespace,
+    results: &mut Vec<BigInt>,
+) -> Expression {
+    match expr {
+        Expression::Add(loc, ty, unchecked, left, right) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.add(right));
+                bigint_to_expression(loc, ty, left.add(right))
+            } else {
+                Expression::Add(
+                    *loc,
+                    ty.clone(),
+                    *unchecked,
+                    Box::new(left),
+                    Box::new(right),
+                )
+            }
+        }
+        Expression::Subtract(loc, ty, unchecked, left, right) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.sub(right));
+                bigint_to_expression(loc, ty, left.sub(right))
+            } else {
+                Expression::Subtract(
+                    *loc,
+                    ty.clone(),
+                    *unchecked,
+                    Box::new(left),
+                    Box::new(right),
+                )
+            }
+        }
+
+        Expression::Multiply(loc, ty, unchecked, left, right) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.mul(right.to_u32().unwrap()));
+                bigint_to_expression(loc, ty, left.mul(right.to_u32().unwrap()))
+            } else {
+                Expression::Multiply(
+                    *loc,
+                    ty.clone(),
+                    *unchecked,
+                    Box::new(left),
+                    Box::new(right),
+                )
+            }
+        }
+
+        Expression::Power(loc, ty, unchecked, left, right) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.pow(right.to_u32().unwrap()));
+                bigint_to_expression(loc, ty, left.pow(right.to_u32().unwrap()))
+            } else {
+                Expression::Power(
+                    *loc,
+                    ty.clone(),
+                    *unchecked,
+                    Box::new(left),
+                    Box::new(right),
+                )
+            }
+        }
+
+        Expression::ShiftLeft(loc, ty, left, right) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.shl(right.to_u32().unwrap()));
+                bigint_to_expression(loc, ty, left.shl(right.to_u32().unwrap()))
+            } else {
+                Expression::ShiftLeft(*loc, ty.clone(), Box::new(left), Box::new(right))
+            }
+        }
+
+        Expression::ShiftRight(loc, ty, left, right, _) => {
+            let left = eval_constants_in_expression(left, ns, results);
+            let right = eval_constants_in_expression(right, ns, results);
+
+            if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
+                (&left, &right)
+            {
+                results.push(left.shl(right.to_u32().unwrap()));
+                bigint_to_expression(loc, ty, left.shr(right.to_u32().unwrap()))
+            } else {
+                Expression::ShiftLeft(*loc, ty.clone(), Box::new(left), Box::new(right))
+            }
+        }
+        Expression::NumberLiteral(_, _, n) => {
+            results.push(n.clone());
+            expr.clone()
+        }
+
+        Expression::Builtin(.., args) => {
+            for args_iter in args {
+                verify_result(args_iter, ns, &args_iter.loc());
+            }
+
+            expr.clone()
+        }
+
+        Expression::InternalFunctionCall { args, .. }
+        | Expression::ExternalFunctionCall { args, .. } => {
+            for args_iter in args.clone() {
+                verify_result(&args_iter, ns, &args_iter.loc());
+            }
+
+            expr.clone()
+        }
+        _ => expr.clone(),
+    }
+}
+
+fn bigint_to_expression(loc: &Loc, ty: &Type, n: BigInt) -> Expression {
+    Expression::NumberLiteral(*loc, ty.clone(), n)
+}
+
+fn overflow_check(ns: &mut Namespace, result: BigInt, ty: Type, loc: Loc) {
+    if let Type::Uint(bits) = ty {
+        // If the result sign is minus, throw an error.
+        if let Sign::Minus = result.sign() {
+            ns.diagnostics.push(Diagnostic::error(
+                loc,
+            format!( "negative value {} does not fit into type {}. Cannot implicitly convert signed literal to unsigned type.",result,ty.to_string(ns)),
+            ));
+        }
+
+        // If bits of the result is more than bits of the type, throw and error.
+        if result.bits() > bits as u64 {
+            ns.diagnostics.push(Diagnostic::error(
+                loc,
+                format!(
+                    "value {} does not fit into type {}.",
+                    result,
+                    ty.to_string(ns)
+                ),
+            ));
+        }
+    }
+
+    if let Type::Int(bits) = ty {
+        // If number of bits is more than what the type can hold. BigInt.bits() is not used here since it disregards the sign.
+        if result.to_signed_bytes_be().len() * 8 > (bits as usize) {
+            ns.diagnostics.push(Diagnostic::error(
+                loc,
+                format!(
+                    "value {} does not fit into type {}.",
+                    result,
+                    ty.to_string(ns)
+                ),
+            ));
+        }
+    }
+}
+
+pub fn verify_result(expr: &Expression, ns: &mut Namespace, loc: &Loc) {
+    let results: &mut Vec<BigInt> = &mut Vec::new();
+    let _ = eval_constants_in_expression(expr, ns, results);
+    if results.last().is_some() {
+        overflow_check(ns, results.last().unwrap().clone(), expr.ty(), *loc);
     }
 }
