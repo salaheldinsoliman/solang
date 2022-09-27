@@ -186,12 +186,6 @@ fn constant_overflow_checks() {
             test_params({usesa: 1 - 2, sesa: 127 + 2});
         }
 
-        function test_builtin (bytes input) public{
-
-            // value 4294967296 does not fit into type uint32.
-            int16 sesa = input.readInt16LE(4294967296);
-        }
-
         function test_for_loop () public {
 
             for (int8 i = 125 + 5; i < 300 ; i++) {
@@ -216,9 +210,6 @@ fn constant_overflow_checks() {
     assert_eq!(errors[9].message, "value 129 does not fit into type int8.");
     assert_eq!(errors[10].message,"negative value -1 does not fit into type uint8. Cannot implicitly convert signed literal to unsigned type.");
     assert_eq!(errors[11].message, "value 129 does not fit into type int8.");
-    assert_eq!(
-        errors[12].message,
-        "value 4294967296 does not fit into type uint32."
-    );
-    assert_eq!(errors[13].message, "value 130 does not fit into type int8.");
+    //assert_eq!(errors[12].message, "value 4294967296 does not fit into type uint32.");
+    assert_eq!(errors[12].message, "value 130 does not fit into type int8.");
 }

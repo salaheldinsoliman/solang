@@ -7,6 +7,7 @@ use num_traits::One;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 
+use super::Recurse;
 use super::ast::{Diagnostic, Expression, Namespace};
 use solang_parser::pt;
 use solang_parser::pt::CodeLocation;
@@ -202,15 +203,50 @@ pub fn eval_const_rational(
     }
 }
 
+
+
+ 
+fn auxiliar(expr: &Expression, recursed_expressions: & mut Vec<Expression>) -> bool {
+
+//println!("EXPR {:?}", expr );
+match  expr{
+
+    Expression::Add( ..)
+    | Expression::Subtract(_, ..)
+    | Expression::Multiply(_, ..)
+    | Expression::Divide(..)
+    | Expression::Modulo(..)
+    | Expression::Power(_, ..)
+    | Expression::BitwiseOr(..)
+    | Expression::BitwiseAnd(..)
+    | Expression::BitwiseXor(..)
+    | Expression::ShiftLeft(..)
+    | Expression::ShiftRight(..) => {
+        
+        recursed_expressions.push(expr.clone());
+
+        return  false;
+    }
+    _ => {}
+}
+
+
+return true;
+
+}
+
+
+
 fn eval_constants_in_expression(
     expr: &Expression,
     ns: &mut Namespace,
     results: &mut Vec<BigInt>,
+    recursed: &mut Vec<Expression>
 ) -> Expression {
     match expr {
         Expression::Add(loc, ty, unchecked, left, right) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -228,8 +264,8 @@ fn eval_constants_in_expression(
             }
         }
         Expression::Subtract(loc, ty, unchecked, left, right) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -248,8 +284,8 @@ fn eval_constants_in_expression(
         }
 
         Expression::Multiply(loc, ty, unchecked, left, right) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -268,8 +304,8 @@ fn eval_constants_in_expression(
         }
 
         Expression::Power(loc, ty, unchecked, left, right) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -288,8 +324,8 @@ fn eval_constants_in_expression(
         }
 
         Expression::ShiftLeft(loc, ty, left, right) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -302,8 +338,8 @@ fn eval_constants_in_expression(
         }
 
         Expression::ShiftRight(loc, ty, left, right, _) => {
-            let left = eval_constants_in_expression(left, ns, results);
-            let right = eval_constants_in_expression(right, ns, results);
+            let left = eval_constants_in_expression(left, ns, results, recursed);
+            let right = eval_constants_in_expression(right, ns, results, recursed);
 
             if let (Expression::NumberLiteral(_, _, left), Expression::NumberLiteral(_, _, right)) =
                 (&left, &right)
@@ -319,23 +355,13 @@ fn eval_constants_in_expression(
             expr.clone()
         }
 
-        Expression::Builtin(.., args) => {
-            for args_iter in args {
-                verify_result(args_iter, ns, &args_iter.loc());
-            }
-
-            expr.clone()
-        }
-
-        Expression::InternalFunctionCall { args, .. }
-        | Expression::ExternalFunctionCall { args, .. } => {
-            for args_iter in args.clone() {
-                verify_result(&args_iter, ns, &args_iter.loc());
-            }
-
-            expr.clone()
-        }
-        _ => expr.clone(),
+        _ => {
+       
+        expr.recurse( recursed, auxiliar);
+            
+            
+        
+            expr.clone()},
     }
 }
 
@@ -379,7 +405,15 @@ fn overflow_check(ns: &mut Namespace, result: BigInt, ty: Type, loc: Loc) {
 
 pub fn verify_result(expr: &Expression, ns: &mut Namespace, loc: &Loc) {
     let results: &mut Vec<BigInt> = &mut Vec::new();
-    let _ = eval_constants_in_expression(expr, ns, results);
+    let recursed: &mut Vec<Expression> = &mut Vec::new();
+    let _ = eval_constants_in_expression(expr, ns, results, recursed);
+    if !recursed.is_empty() {
+        
+        for  iter in recursed {
+            verify_result(iter, ns, &iter.loc());
+        }
+
+    }
     if results.last().is_some() {
         overflow_check(ns, results.last().unwrap().clone(), expr.ty(), *loc);
     }

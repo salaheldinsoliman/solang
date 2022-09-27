@@ -304,6 +304,16 @@ pub fn resolve_function_body(
     Ok(())
 }
 
+
+fn testt(expr: &Expression, ctx: &mut String) -> bool{
+
+
+println!("INSIDE RECURSE{:?}",expr);
+
+true
+
+}
+
 /// Resolve a statement
 #[allow(clippy::ptr_arg)]
 fn statement(
@@ -332,6 +342,9 @@ fn statement(
                     ResolveTo::Type(&var_ty),
                 )?;
 
+                let sesa = &mut "sesa".to_string();
+                //expr.recurse(sesa, testt);
+                //let mut params = VerifyResultParams {ns, loc };
                 verify_result(&expr, ns, loc);
                 used_variable(ns, &expr, symtable);
 
