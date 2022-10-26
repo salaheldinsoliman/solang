@@ -20,6 +20,7 @@ use solang_parser::{
 };
 use std::collections::HashSet;
 use std::{collections::HashMap, fmt::Write, ops::Mul};
+use super::expression::expression_error;
 
 /// List the types which should be resolved later
 pub struct ResolveFields<'a> {

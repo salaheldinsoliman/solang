@@ -39,6 +39,7 @@ pub(crate) fn resolve_yul_expression(
     function_table: &mut FunctionsTable,
     ns: &mut Namespace,
 ) -> Result<YulExpression, ()> {
+    println!("EXPRRRRRRRRR {:?}", expr);
     match expr {
         pt::YulExpression::BoolLiteral(loc, value, ty) => resolve_bool_literal(loc, value, ty, ns),
 

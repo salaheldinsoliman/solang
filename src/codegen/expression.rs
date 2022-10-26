@@ -41,6 +41,7 @@ pub fn expression(
     opt: &Options,
 ) -> Expression {
     match expr {
+        ast::Expression::Error(_) => todo!(),
         ast::Expression::StorageVariable(loc, _, var_contract_no, var_no) => {
             // base storage variables should precede contract variables, not overlap
             ns.contracts[contract_no].get_storage_slot(*loc, *var_contract_no, *var_no, ns, None)

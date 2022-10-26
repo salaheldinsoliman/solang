@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::fmt::{self, Display};
+use lalrpop_util::ErrorRecovery;
+use super::lexer::{Token, LexicalError};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 /// file no, start offset, end offset (in bytes)
@@ -145,6 +147,7 @@ pub enum SourceUnitPart {
     TypeDefinition(Box<TypeDefinition>),
     Using(Box<Using>),
     StraySemicolon(Loc),
+    Error(ErrorRecovery<usize, Token, LexicalError>, Loc),
 }
 
 impl SourceUnitPart {
@@ -162,6 +165,7 @@ impl SourceUnitPart {
             SourceUnitPart::TypeDefinition(def) => &def.loc,
             SourceUnitPart::Using(def) => &def.loc,
             SourceUnitPart::StraySemicolon(loc) => loc,
+            SourceUnitPart::Error(..,loc) => loc,
         }
     }
 }
@@ -488,6 +492,7 @@ pub enum Expression {
     ArrayLiteral(Loc, Vec<Expression>),
     Unit(Loc, Box<Expression>, Unit),
     This(Loc),
+    Error(ErrorRecovery<usize, Token, LexicalError>, Loc),
 }
 
 impl CodeLocation for Expression {
@@ -552,6 +557,7 @@ impl CodeLocation for Expression {
             | Expression::This(loc)
             | Expression::Variable(Identifier { loc, .. })
             | Expression::AddressLiteral(loc, _) => *loc,
+            | Expression::Error(..,loc) => *loc,
             Expression::StringLiteral(v) => v[0].loc,
             Expression::HexLiteral(v) => v[0].loc,
         }

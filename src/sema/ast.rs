@@ -1009,6 +1009,7 @@ impl CodeLocation for Expression {
             | Expression::FormatString(loc, _)
             | Expression::InterfaceId(loc, ..)
             | Expression::And(loc, ..) => *loc,
+            | Expression::Error(loc) => *loc
         }
     }
 }

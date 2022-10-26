@@ -236,6 +236,7 @@ impl Dot {
         parent_rel: String,
     ) {
         match expr {
+            Expression::Error(_) => todo!(),
             Expression::BoolLiteral(loc, val) => {
                 let labels = vec![
                     format!("bool literal: {}", if *val { "true" } else { "false" }),

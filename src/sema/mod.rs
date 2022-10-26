@@ -10,6 +10,7 @@ use crate::sema::unused_variable::{check_unused_events, check_unused_namespace_v
 use num_bigint::BigInt;
 use solang_parser::{doccomment::parse_doccomments, parse, pt};
 use std::ffi::OsStr;
+use super::sema::expression::expression_error;
 
 mod address;
 pub mod ast;
@@ -101,6 +102,7 @@ fn sema_file(file: &ResolvedFile, resolver: &mut FileResolver, ns: &mut ast::Nam
             pt::SourceUnitPart::ImportDirective(import) => {
                 resolve_import(import, Some(file), file_no, resolver, ns);
             }
+            
             _ => (),
         }
     }

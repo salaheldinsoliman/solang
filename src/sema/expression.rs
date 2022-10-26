@@ -30,6 +30,8 @@ use std::{
     ops::{Mul, Shl, Sub},
     str::FromStr,
 };
+use lalrpop_util::{ErrorRecovery,ParseError};
+use solang_parser::lexer::{Token, LexicalError};
 
 impl RetrieveType for Expression {
     fn ty(&self) -> Type {
@@ -108,6 +110,7 @@ impl RetrieveType for Expression {
             // codegen Expressions
             Expression::InternalFunction { ty, .. } => ty.clone(),
             Expression::ExternalFunction { ty, .. } => ty.clone(),
+            Expression::Error { .. } => Type::String,
         }
     }
 }
@@ -2163,8 +2166,48 @@ pub fn expression(
                 Err(())
             }
         },
+        pt::Expression::Error( error, loc) => {
+
+expression_error(error, *loc);
+Err(())
+
+        },
     }
 }
+
+pub (super) fn expression_error(error: &ErrorRecovery<usize, Token, LexicalError>, loc: pt::Loc  )-> Diagnostic {
+
+    match &error.error {
+        ParseError::InvalidToken {..} => Diagnostic::parser_error(
+            loc,
+            "invalid token".to_string(),
+        ),
+        ParseError::UnrecognizedToken {
+            token,
+            expected,
+        } => Diagnostic::parser_error(
+            loc,
+            format!(
+                "unrecognised token '{:?}', expected {}",
+                token,
+                expected.join(", ")
+            ),
+        ),
+        ParseError::User { error } => Diagnostic::parser_error(error.loc(), error.to_string()),
+        ParseError::ExtraToken { token } => Diagnostic::parser_error(
+            loc,
+            format!("extra token '{}' encountered", token.0),
+        ),
+        ParseError::UnrecognizedEOF { expected , ..} => Diagnostic::parser_error(
+            loc,
+            format!("unexpected end of file, expecting {}", expected.join(", ")),
+        ),
+    }
+
+
+}
+
+
 
 fn string_literal(
     v: &[pt::StringLiteral],

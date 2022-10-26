@@ -49,8 +49,9 @@ fn parse_test() {
     let mut comments = Vec::new();
     let lex = Lexer::new(src, 0, &mut comments);
 
+    let my_errs = &mut Vec::new();
     let actual_parse_tree = solidity::SourceUnitParser::new()
-        .parse(src, 0, lex)
+        .parse(src, 0, my_errs, lex)
         .unwrap();
 
     let expected_parse_tree = SourceUnit(vec![
@@ -506,8 +507,9 @@ fn test_assembly_parser() {
 
     let mut comments = Vec::new();
     let lex = Lexer::new(src, 0, &mut comments);
+    let my_errs = &mut Vec::new();
     let actual_parse_tree = solidity::SourceUnitParser::new()
-        .parse(src, 0, lex)
+        .parse(src, 0,my_errs,  lex)
         .unwrap();
 
     let expected_parse_tree = SourceUnit(vec![SourceUnitPart::FunctionDefinition(Box::new(
