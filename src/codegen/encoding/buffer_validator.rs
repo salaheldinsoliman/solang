@@ -138,6 +138,7 @@ impl BufferValidator<'_> {
         cfg.set_basic_block(invalid);
 
         // TODO: This needs a proper error message
+        //report_error(opt.report_errors, "not all bytes read".to_string(), *loc,cfg, vartab);
         assert_failure(&Loc::Codegen, None, ns, cfg, vartab);
 
         cfg.set_basic_block(valid);
@@ -216,6 +217,7 @@ impl BufferValidator<'_> {
 
         cfg.set_basic_block(out_of_bounds_block);
         // TODO: Add an error message here
+        // report error false, "out of bounds encoding".to_string(), Loc::Codegen
         assert_failure(&Loc::Codegen, None, ns, cfg, vartab);
         cfg.set_basic_block(inbounds_block);
     }

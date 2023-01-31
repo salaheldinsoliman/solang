@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::codegen::expression::assert_failure;
+use crate::codegen::expression::{assert_failure, report_error};
 use crate::codegen::{
     cfg::{ControlFlowGraph, Instr},
     vartable::Vartable,
@@ -168,6 +168,7 @@ pub(crate) fn process_builtin(
         }
 
         YulBuiltInFunction::Invalid => {
+            report_error(opt.report_errors,  "reached invalid instruction".to_string(), *loc, cfg, vartab);
             assert_failure(loc, None, ns, cfg, vartab);
             Expression::Poison
         }

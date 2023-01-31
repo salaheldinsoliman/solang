@@ -21,6 +21,7 @@ fn parse_and_codegen(src: &'static str) -> Namespace {
         math_overflow_check: false,
         generate_debug_information: false,
         log_api_return_codes: false,
+        report_errors: false,
     };
 
     codegen(&mut ns, &opt);

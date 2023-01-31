@@ -33,6 +33,7 @@ impl SubstrateTarget {
     ) where
         F: Fn(&ControlFlowGraph) -> bool,
     {
+        //self.report_error(bin, reason_string, None, ns);
         // create start function
         let no_function_matched = match fallback {
             Some(block) => block,

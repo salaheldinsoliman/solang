@@ -181,6 +181,13 @@ fn main() {
                             .short('g')
                             .long("generate-debug-info")
                             .hide(true),
+                    )
+                    .arg(
+                        Arg::new("REPORTERRORS")
+                            .help("Enable printing runtime errors")
+                            .short('d')
+                            .long("report-errors")
+                            .hide(true),
                     ),
             )
             .subcommand(
@@ -384,6 +391,8 @@ fn compile(matches: &ArgMatches) {
 
     let log_api_return_codes = *matches.get_one::<bool>("LOGAPIRETURNS").unwrap();
 
+    let report_errors = matches.contains_id("REPORTERRORS");
+
     let mut resolver = imports_arg(matches);
 
     let opt_level = match matches.get_one::<String>("OPT").unwrap().as_str() {
@@ -406,6 +415,7 @@ fn compile(matches: &ArgMatches) {
             .unwrap(),
         opt_level,
         log_api_return_codes,
+        report_errors,
     };
 
     let mut namespaces = Vec::new();

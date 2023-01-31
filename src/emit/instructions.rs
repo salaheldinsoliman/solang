@@ -6,8 +6,9 @@ use crate::codegen::{
 };
 use crate::emit::binary::Binary;
 use crate::emit::cfg::{create_block, BasicBlock, Work};
-use crate::emit::expression::expression;
+use crate::emit::expression::{expression, format_print};
 use crate::emit::TargetRuntime;
+use crate::emit_context;
 use crate::sema::ast::{Contract, Namespace, RetrieveType, Type};
 use crate::Target;
 use inkwell::types::BasicType;
@@ -16,6 +17,7 @@ use inkwell::values::{
 };
 use inkwell::{AddressSpace, IntPredicate};
 use num_traits::ToPrimitive;
+use solang_parser::pt::CodeLocation;
 use std::collections::{HashMap, VecDeque};
 
 pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
@@ -117,12 +119,21 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             value,
             offset,
         } => {
+            let index_loc = offset.loc();
             let value = expression(target, bin, value, &w.vars, function, ns);
 
             let slot = expression(target, bin, storage, &w.vars, function, ns).into_int_value();
             let offset = expression(target, bin, offset, &w.vars, function, ns).into_int_value();
 
-            target.set_storage_bytes_subscript(bin, function, slot, offset, value.into_int_value());
+            target.set_storage_bytes_subscript(
+                bin,
+                function,
+                slot,
+                offset,
+                value.into_int_value(),
+                ns,
+                index_loc,
+            );
         }
         Instr::PushStorage {
             res,
@@ -139,9 +150,10 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 target.storage_push(bin, function, ty, slot, val, ns);
         }
         Instr::PopStorage { res, ty, storage } => {
+            let loc = storage.loc();
             let slot = expression(target, bin, storage, &w.vars, function, ns).into_int_value();
 
-            let value = target.storage_pop(bin, function, ty, slot, res.is_some(), ns);
+            let value = target.storage_pop(bin, function, ty, slot, res.is_some(), ns, loc);
 
             if let Some(res) = res {
                 w.vars.get_mut(res).unwrap().value = value.unwrap();
@@ -275,7 +287,12 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             );
             bin.builder.build_store(size_field, new_len);
         }
-        Instr::PopMemory { res, ty, array } => {
+        Instr::PopMemory {
+            res,
+            ty,
+            array,
+            loc,
+        } => {
             let a = w.vars[array].value.into_pointer_value();
             let len = unsafe {
                 bin.builder.build_gep(
@@ -302,6 +319,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 .build_conditional_branch(is_array_empty, error, pop);
 
             bin.builder.position_at_end(error);
+            target.report_error(bin, "pop from empty array".to_string(), Some(*loc), ns);
             target.assert_failure(
                 bin,
                 bin.context
@@ -447,8 +465,12 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
         }
         Instr::Print { expr } => {
             let expr = expression(target, bin, expr, &w.vars, function, ns);
-
-            target.print(bin, bin.vector_bytes(expr), bin.vector_len(expr));
+            if ns.target.is_substrate() {
+                let res = format_print(bin, ns, expr, "print: ".to_string());
+                target.print(bin, bin.vector_bytes(res), bin.vector_len(res));
+            } else {
+                target.print(bin, bin.vector_bytes(expr), bin.vector_len(expr));
+            }
         }
         Instr::Call {
             res,
@@ -676,6 +698,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             salt,
             address,
             seeds,
+            loc,
         } => {
             let encoded_args = expression(target, bin, encoded_args, &w.vars, function, ns);
             let encoded_args_len = expression(target, bin, encoded_args_len, &w.vars, function, ns);
@@ -786,6 +809,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 salt,
                 seeds,
                 ns,
+                *loc,
             );
 
             w.vars.get_mut(res).unwrap().value = bin.builder.build_load(address_stack, "address");
@@ -800,6 +824,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             accounts,
             seeds,
         } => {
+            let loc = payload.loc();
             let gas = expression(target, bin, gas, &w.vars, function, ns).into_int_value();
             let value = expression(target, bin, value, &w.vars, function, ns).into_int_value();
             let payload_ty = payload.ty();
@@ -949,6 +974,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 seeds,
                 callty.clone(),
                 ns,
+                loc,
             );
         }
         Instr::ValueTransfer {
@@ -956,6 +982,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             address,
             value,
         } => {
+            let loc = value.loc();
             let value = expression(target, bin, value, &w.vars, function, ns).into_int_value();
             let address =
                 expression(target, bin, address, &w.vars, function, ns).into_array_value();
@@ -986,6 +1013,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 ),
                 value,
                 ns,
+                loc,
             );
         }
         Instr::AbiDecode {
@@ -1252,6 +1280,10 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
 
         Instr::ReturnCode { code } => {
             target.return_code(bin, bin.return_values[code]);
+        }
+        Instr::DebugPrint { string, loc } => {
+            emit_context!(bin);
+            target.report_error(bin, string.to_owned(), Some(*loc), ns);
         }
     }
 }

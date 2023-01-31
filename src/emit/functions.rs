@@ -76,13 +76,14 @@ pub(super) fn emit_initializer<'a, T: TargetRuntime<'a>>(
     function
 }
 
-/// If we receive a value transfer, and we are "payable", abort with revert
+/// If we receive a value transfer, and we are not "payable", abort with revert
 pub(super) fn abort_if_value_transfer<'a, T: TargetRuntime<'a> + ?Sized>(
     target: &T,
     binary: &Binary,
     function: FunctionValue,
     ns: &Namespace,
 ) {
+    println!("abort if value tranfser");
     let value = target.value_transferred(binary, ns);
 
     let got_value = binary.builder.build_int_compare(
@@ -105,6 +106,12 @@ pub(super) fn abort_if_value_transfer<'a, T: TargetRuntime<'a> + ?Sized>(
 
     binary.builder.position_at_end(abort_value_transfer);
 
+    target.report_error(
+        binary,
+        "non payable function recieved value".to_string(),
+        None,
+        ns,
+    );
     target.assert_failure(
         binary,
         binary

@@ -1,13 +1,13 @@
 import '@polkadot/api-augment';
 import fs, { PathLike } from 'fs';
-import { ApiPromise, WsProvider, Keyring } from '@polkadot/api';
+import { ApiPromise, WsProvider, Keyring} from '@polkadot/api';
 import { convertWeight } from '@polkadot/api-contract/base/util';
 import { CodePromise, ContractPromise } from '@polkadot/api-contract';
 import { SubmittableExtrinsic } from '@polkadot/api/types';
 import { Codec, ISubmittableResult } from '@polkadot/types/types';
 import { KeyringPair } from '@polkadot/keyring/types';
 import expect from 'expect';
-import { ContractExecResultResult, WeightV2 } from '@polkadot/types/interfaces';
+import { AccountId, ContractExecResultResult, WeightV2, CodeSource } from '@polkadot/types/interfaces';
 
 const default_url = "ws://127.0.0.1:9944";
 
@@ -26,6 +26,21 @@ export function createConnection(): Promise<ApiPromise> {
 
   return ApiPromise.create({ provider: new WsProvider(url) });
 }
+
+export async function dry_run_instansiate(file: PathLike, api: ApiPromise) {
+  console.log("stucl")
+  const ALICE = new Keyring({ type: 'sr25519' }).addFromUri('//Alice').address;
+  const contractJson = fs.readFileSync(file, { encoding: 'utf-8' });
+  //const gasLimit = api.registry.createType('WeightV2', convertWeight(200000n * 1000000n).v2Weight);
+  const codee = new CodePromise(api, contractJson, null);
+  let code = {
+    Upload: codee.abi.info.source.wasm
+  }
+  console.log("stuck here ya kosomal")
+  let res = await api.call.contractsApi.instantiate(ALICE,120000000,null,null,code,'sesa',"");
+  return res
+}
+
 
 export function deploy(api: ApiPromise, pair: KeyringPair, file: PathLike, value: bigint, ...params: unknown[]): Promise<any> {
   const contractJson = fs.readFileSync(file, { encoding: 'utf-8' });
@@ -81,10 +96,21 @@ export function transaction(tx: SubmittableExtrinsic<"promise", ISubmittableResu
 
 // Returns the required gas estimated from a dry run
 export async function weight(api: ApiPromise, contract: ContractPromise, message: string, args?: unknown[], value?: number) {
+  let res = await dry_run(api, contract, message, args, value);
+  return res.gasRequired
+}
+
+export async function debug_buffer(api: ApiPromise, contract: ContractPromise, message: string, args?: unknown[], value?: number) {
+  let res = await dry_run(api, contract, message, args, value);
+  return res.debugMessage.toHuman()
+}
+
+// Return dry run result
+export async function dry_run(api: ApiPromise, contract: ContractPromise, message: string, args?: unknown[], value?: number) {
   const ALICE = new Keyring({ type: 'sr25519' }).addFromUri('//Alice').address;
   const msg = contract.abi.findMessage(message);
   const dry = await api.call.contractsApi.call(ALICE, contract.address, value ? value : 0, null, null, msg.toU8a(args ? args : []));
-  return dry.gasRequired;
+  return dry;
 }
 
 // FIXME: The old contract.query API does not support WeightV2 yet

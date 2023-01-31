@@ -396,6 +396,7 @@ contract caller {
             generate_debug_information: false,
             opt_level: OptimizationLevel::None,
             log_api_return_codes: false,
+            report_errors: false,
         },
     );
 
@@ -1122,6 +1123,7 @@ fn deduplication() {
             generate_debug_information: false,
             opt_level: OptimizationLevel::None,
             log_api_return_codes: false,
+            report_errors: false,
         },
     );
 

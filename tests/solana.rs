@@ -132,10 +132,14 @@ struct Assign {
 }
 
 fn build_solidity(src: &str) -> VirtualMachine {
-    build_solidity_with_overflow_check(src, false)
+    build_solidity_with_options(src, false, false)
 }
 
-fn build_solidity_with_overflow_check(src: &str, math_overflow_flag: bool) -> VirtualMachine {
+fn build_solidity_with_options(
+    src: &str,
+    math_overflow_flag: bool,
+    report_errors: bool,
+) -> VirtualMachine {
     let mut cache = FileResolver::new();
 
     cache.set_file_contents("test.sol", src.to_string());
@@ -147,6 +151,7 @@ fn build_solidity_with_overflow_check(src: &str, math_overflow_flag: bool) -> Vi
         Target::Solana,
         math_overflow_flag,
         false,
+        report_errors,
     );
 
     ns.print_diagnostics_in_plain(&cache, false);

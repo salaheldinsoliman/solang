@@ -12,7 +12,7 @@ use solang_parser::pt;
 use std::collections::HashMap;
 
 use crate::emit::functions::{abort_if_value_transfer, emit_functions, emit_initializer};
-use crate::emit::{Binary, TargetRuntime};
+use crate::emit::{Binary, TargetRuntime, expression::format_print};
 
 mod dispatch;
 mod storage;
@@ -386,10 +386,8 @@ impl SubstrateTarget {
             Some(fallback_block),
             |_| false,
         );
-
         // emit fallback code
         binary.builder.position_at_end(fallback_block);
-
         self.assert_failure(
             binary,
             binary
@@ -1854,7 +1852,7 @@ fn log_return_code(binary: &Binary, api: &'static str, code: IntValue) {
 
     emit_context!(binary);
 
-    let fmt = format!("{api}=");
+    let fmt = format!("api_call: {api}");
     let msg = fmt.as_bytes();
     let length = i32_const!(msg.len() as u64 + 16);
     let out_buf =
@@ -1889,5 +1887,9 @@ fn log_return_code(binary: &Binary, api: &'static str, code: IntValue) {
             .build_ptr_to_int(out_buf, binary.context.i32_type(), "out_buf_ptr"),
         "msg_len",
     );
+    
+    
+
+    //format_print(binary, ns, expr, source_str);
     call!("seal_debug_message", &[out_buf.into(), msg_len.into()]);
 }

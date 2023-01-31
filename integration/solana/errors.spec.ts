@@ -19,6 +19,7 @@ describe('Testing errors', function () {
         } catch (e) {
             expect(e).toBeInstanceOf(TransactionError);
             if (e instanceof TransactionError) {
+                console.log ("sesa",e.message)
                 expect(e.message).toBe('Do the revert thing');
                 expect(e.computeUnitsUsed).toBeGreaterThan(1400);
                 expect(e.computeUnitsUsed).toBeLessThan(1600);

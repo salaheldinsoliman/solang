@@ -12,6 +12,7 @@ use inkwell::types::IntType;
 use inkwell::values::{
     ArrayValue, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue,
 };
+use solang_parser::pt::Loc;
 
 pub mod binary;
 mod cfg;
@@ -168,6 +169,8 @@ pub trait TargetRuntime<'a> {
         function: FunctionValue,
         slot: IntValue<'a>,
         index: IntValue<'a>,
+        loc: Loc,
+        ns: &Namespace,
     ) -> IntValue<'a>;
 
     fn set_storage_bytes_subscript(
@@ -177,6 +180,8 @@ pub trait TargetRuntime<'a> {
         slot: IntValue<'a>,
         index: IntValue<'a>,
         value: IntValue<'a>,
+        ns: &Namespace,
+        loc: Loc,
     );
 
     fn storage_subscript(
@@ -207,6 +212,7 @@ pub trait TargetRuntime<'a> {
         slot: IntValue<'a>,
         load: bool,
         ns: &Namespace,
+        loc: Loc,
     ) -> Option<BasicValueEnum<'a>>;
 
     fn storage_array_length(
@@ -231,6 +237,14 @@ pub trait TargetRuntime<'a> {
     /// Prints a string
     fn print(&self, bin: &Binary, string: PointerValue, length: IntValue);
 
+    fn report_error(
+        &self,
+        bin: &Binary,
+        reason_string: String,
+        reason_loc: Option<Loc>,
+        ns: &Namespace,
+    );
+
     /// Return success without any result
     fn return_empty_abi(&self, bin: &Binary);
 
@@ -253,6 +267,7 @@ pub trait TargetRuntime<'a> {
     ) -> BasicValueEnum<'a>;
 
     /// Calls constructor
+    #[allow(clippy::too_many_arguments)]
     fn create_contract<'b>(
         &mut self,
         bin: &Binary<'b>,
@@ -267,9 +282,11 @@ pub trait TargetRuntime<'a> {
         salt: Option<IntValue<'b>>,
         seeds: Option<(PointerValue<'b>, IntValue<'b>)>,
         ns: &Namespace,
+        loc: Loc,
     );
 
     /// call external function
+    #[allow(clippy::too_many_arguments)]
     fn external_call<'b>(
         &self,
         bin: &Binary<'b>,
@@ -284,6 +301,7 @@ pub trait TargetRuntime<'a> {
         seeds: Option<(PointerValue<'b>, IntValue<'b>)>,
         ty: CallTy,
         ns: &Namespace,
+        loc: Loc,
     );
 
     /// send value to address
@@ -295,6 +313,7 @@ pub trait TargetRuntime<'a> {
         _address: PointerValue<'b>,
         _value: IntValue<'b>,
         _ns: &Namespace,
+        loc: Loc,
     );
 
     /// builtin expressions

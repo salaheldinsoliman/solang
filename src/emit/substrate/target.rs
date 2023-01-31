@@ -2,7 +2,7 @@
 
 use crate::codegen::cfg::{HashTy, ReturnCode};
 use crate::emit::binary::Binary;
-use crate::emit::expression::expression;
+use crate::emit::expression::{expression, print_runtime_error};
 use crate::emit::storage::StorageSlot;
 use crate::emit::substrate::{log_return_code, SubstrateTarget, SCRATCH_SIZE};
 use crate::emit::{TargetRuntime, Variable};
@@ -15,7 +15,7 @@ use inkwell::values::{
     PointerValue,
 };
 use inkwell::{AddressSpace, IntPredicate};
-use solang_parser::pt;
+use solang_parser::pt::{self, Loc};
 use std::collections::HashMap;
 
 impl<'a> TargetRuntime<'a> for SubstrateTarget {
@@ -307,6 +307,8 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         function: FunctionValue,
         slot: IntValue<'a>,
         index: IntValue<'a>,
+        loc: Loc,
+        ns: &Namespace,
     ) -> IntValue<'a> {
         emit_context!(binary);
 
@@ -359,6 +361,13 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
             .build_conditional_branch(in_range, retrieve_block, bang_block);
 
         binary.builder.position_at_end(bang_block);
+
+        self.report_error(
+            binary,
+            "storage array index out of bounds".to_string(),
+            Some(loc),
+            ns,
+        );
         self.assert_failure(binary, byte_ptr!().const_null(), i32_zero!());
 
         binary.builder.position_at_end(retrieve_block);
@@ -381,6 +390,8 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         slot: IntValue,
         index: IntValue,
         val: IntValue,
+        ns: &Namespace,
+        loc: Loc,
     ) {
         emit_context!(binary);
 
@@ -433,6 +444,12 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
             .build_conditional_branch(in_range, retrieve_block, bang_block);
 
         binary.builder.position_at_end(bang_block);
+        self.report_error(
+            binary,
+            "set storage index out of bounds".to_string(),
+            Some(loc),
+            ns,
+        );
         self.assert_failure(binary, byte_ptr!().const_null(), i32_zero!());
 
         binary.builder.position_at_end(retrieve_block);
@@ -545,7 +562,8 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         _ty: &ast::Type,
         slot: IntValue<'a>,
         load: bool,
-        _ns: &ast::Namespace,
+        ns: &ast::Namespace,
+        loc: Loc,
     ) -> Option<BasicValueEnum<'a>> {
         emit_context!(binary);
 
@@ -600,6 +618,12 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
             .build_conditional_branch(in_range, retrieve_block, bang_block);
 
         binary.builder.position_at_end(bang_block);
+        self.report_error(
+            binary,
+            "pop from empty storage array".to_string(),
+            Some(loc),
+            ns,
+        );
         self.assert_failure(binary, byte_ptr!().const_null(), i32_zero!());
 
         binary.builder.position_at_end(retrieve_block);
@@ -1059,6 +1083,7 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         salt: Option<IntValue<'b>>,
         _seeds: Option<(PointerValue<'b>, IntValue<'b>)>,
         ns: &ast::Namespace,
+        loc: Loc,
     ) {
         emit_context!(binary);
 
@@ -1185,6 +1210,12 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
 
             binary.builder.position_at_end(bail_block);
 
+            self.report_error(
+                binary,
+                "contract creation failed".to_string(),
+                Some(loc),
+                ns,
+            );
             self.assert_failure(
                 binary,
                 scratch_buf,
@@ -1213,6 +1244,7 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         _seeds: Option<(PointerValue<'b>, IntValue<'b>)>,
         _ty: ast::CallTy,
         ns: &ast::Namespace,
+        loc: Loc,
     ) {
         emit_context!(binary);
 
@@ -1268,6 +1300,7 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
 
             binary.builder.position_at_end(bail_block);
 
+            self.report_error(binary, "external call failed".to_string(), Some(loc), ns);
             self.assert_failure(
                 binary,
                 scratch_buf,
@@ -1290,6 +1323,7 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
         address: PointerValue<'b>,
         value: IntValue<'b>,
         ns: &ast::Namespace,
+        loc: Loc,
     ) {
         emit_context!(binary);
 
@@ -1335,6 +1369,7 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
 
             binary.builder.position_at_end(bail_block);
 
+            self.report_error(binary, "value transfer failure".to_string(), Some(loc), ns);
             self.assert_failure(binary, byte_ptr!().const_null(), i32_zero!());
 
             binary.builder.position_at_end(success_block);
@@ -1822,5 +1857,30 @@ impl<'a> TargetRuntime<'a> for SubstrateTarget {
     ) -> IntValue<'a> {
         // not needed for slot-based storage chains
         unimplemented!()
+    }
+
+    fn report_error(
+        &self,
+        bin: &Binary,
+        reason_string: String,
+        reason_loc: Option<Loc>,
+        ns: &Namespace,
+    ) {
+        if !bin.options.report_errors {
+            return;
+        }
+        emit_context!(bin);
+        let custom_error = print_runtime_error(bin, ns, &reason_string, reason_loc);
+        call!(
+            "seal_debug_message",
+            &[
+                bin.vector_bytes(custom_error).into(),
+                bin.vector_len(custom_error).into()
+            ]
+        )
+        .try_as_basic_value()
+        .left()
+        .unwrap()
+        .into_int_value();
     }
 }

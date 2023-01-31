@@ -22,6 +22,7 @@ use num_traits::One;
 use parse_display::Display;
 use solang_parser::pt;
 use solang_parser::pt::CodeLocation;
+use solang_parser::pt::Loc;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::AddAssign;
 use std::str;
@@ -48,9 +49,13 @@ pub enum Instr {
         args: Vec<Expression>,
     },
     /// Return
-    Return { value: Vec<Expression> },
+    Return {
+        value: Vec<Expression>,
+    },
     /// Jump unconditionally
-    Branch { block: usize },
+    Branch {
+        block: usize,
+    },
     /// Jump conditionally
     BranchCond {
         cond: Expression,
@@ -58,11 +63,18 @@ pub enum Instr {
         false_block: usize,
     },
     /// Set array element in memory
-    Store { dest: Expression, data: Expression },
+    Store {
+        dest: Expression,
+        data: Expression,
+    },
     /// Abort execution
-    AssertFailure { encoded_args: Option<Expression> },
+    AssertFailure {
+        encoded_args: Option<Expression>,
+    },
     /// Print to log message
-    Print { expr: Expression },
+    Print {
+        expr: Expression,
+    },
     /// Load storage (this is an instruction rather than an expression
     /// so that it can be moved around by the dead storage pass
     LoadStorage {
@@ -71,7 +83,10 @@ pub enum Instr {
         storage: Expression,
     },
     /// Clear storage at slot for ty (might span multiple slots)
-    ClearStorage { ty: Type, storage: Expression },
+    ClearStorage {
+        ty: Type,
+        storage: Expression,
+    },
     /// Set storage value at slot
     SetStorage {
         ty: Type,
@@ -106,7 +121,12 @@ pub enum Instr {
     },
     /// Pop element from memory array. The push builtin returns a reference
     /// to the new element which is stored in res.
-    PopMemory { res: usize, ty: Type, array: usize },
+    PopMemory {
+        res: usize,
+        ty: Type,
+        array: usize,
+        loc: Loc,
+    },
     /// Create contract and call constructor. If creating the contract fails,
     /// either store the result in success or abort success.
     Constructor {
@@ -120,6 +140,7 @@ pub enum Instr {
         salt: Option<Expression>,
         address: Option<Expression>,
         seeds: Option<Expression>,
+        loc: Loc,
     },
     /// Call external functions. If the call fails, set the success failure
     /// or abort if this is None
@@ -152,7 +173,9 @@ pub enum Instr {
     /// Insert unreachable instruction after e.g. self-destruct
     Unreachable,
     /// Self destruct
-    SelfDestruct { recipient: Expression },
+    SelfDestruct {
+        recipient: Expression,
+    },
     /// Emit event
     EmitEvent {
         event_no: usize,
@@ -184,7 +207,14 @@ pub enum Instr {
         data_len: Expression,
     },
     /// Return a code at the end of a function
-    ReturnCode { code: ReturnCode },
+    ReturnCode {
+        code: ReturnCode,
+    },
+
+    DebugPrint {
+        string: String,
+        loc: Loc,
+    },
 }
 
 /// This struct defined the return codes that we send to the execution environment when we return
@@ -343,7 +373,8 @@ impl Instr {
             | Instr::Nop
             | Instr::ReturnCode { .. }
             | Instr::Branch { .. }
-            | Instr::PopMemory { .. } => {}
+            | Instr::PopMemory { .. }
+            | Instr::DebugPrint { .. } => {}
         }
     }
 }
@@ -990,7 +1021,7 @@ impl ControlFlowGraph {
                 ty.to_string(ns),
                 self.expr_to_string(contract, ns, value),
             ),
-            Instr::PopMemory { res, ty, array } => format!(
+            Instr::PopMemory { res, ty, array, loc:_ } => format!(
                 "%{}, %{} = pop array ty:{}",
                 self.vars[res].id.name,
                 self.vars[array].id.name,
@@ -1158,7 +1189,8 @@ impl ControlFlowGraph {
                 gas,
                 salt,
                 value,
-                address,seeds
+                address,seeds,
+                loc:_
 
             } => format!(
                 "%{}, {} = constructor salt:{} value:{} gas:{} address:{} seeds:{} {} (encoded buffer: {}, buffer len: {})",
@@ -1259,6 +1291,10 @@ impl ControlFlowGraph {
 
             Instr::ReturnCode { code } => {
                 format!("return code: {code}")
+            }
+
+            Instr::DebugPrint { string , loc:_} => {
+                format!("debug message: {string}")
             }
         }
     }

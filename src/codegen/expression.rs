@@ -789,6 +789,7 @@ pub fn expression(
                         res: address_res,
                         ty: args[0].ty(),
                         array: array_pos,
+                        loc: *loc,
                     },
                 );
                 cfg.modify_temp_array_length(*loc, true, array_pos, vartab);
@@ -821,7 +822,7 @@ pub fn expression(
             kind: ast::Builtin::Revert,
             args,
             ..
-        } => revert(args, cfg, contract_no, func, ns, vartab, opt),
+        } => revert(args, cfg, contract_no, func, ns, vartab, opt, expr.loc()),
         ast::Expression::Builtin {
             kind: ast::Builtin::SelfDestruct,
             args,
@@ -1297,6 +1298,13 @@ fn expr_assert(
         },
     );
     cfg.set_basic_block(false_);
+    report_error(
+        opt.report_errors,
+        "assert failure".to_string(),
+        args.loc(),
+        cfg,
+        vartab,
+    );
     assert_failure(&Loc::Codegen, None, ns, cfg, vartab);
     cfg.set_basic_block(true_);
     Expression::Poison
@@ -1348,10 +1356,20 @@ fn revert(
     ns: &Namespace,
     vartab: &mut Vartable,
     opt: &Options,
+    loc: Loc,
 ) -> Expression {
     let expr = args
         .get(0)
         .map(|s| expression(s, cfg, contract_no, func, ns, vartab, opt));
+
+    report_error(
+        opt.report_errors,
+        "revert encountered".to_string(),
+        loc,
+        cfg,
+        vartab,
+    );
+
     assert_failure(&Loc::Codegen, expr, ns, cfg, vartab);
     Expression::Poison
 }
@@ -1693,6 +1711,13 @@ fn expr_builtin(
             );
 
             cfg.set_basic_block(out_of_bounds);
+            report_error(
+                opt.report_errors,
+                "integer too large to write in buffer".to_string(),
+                *loc,
+                cfg,
+                vartab,
+            );
             assert_failure(loc, None, ns, cfg, vartab);
 
             cfg.set_basic_block(in_bounds);
@@ -1744,6 +1769,13 @@ fn expr_builtin(
             );
 
             cfg.set_basic_block(out_ouf_bounds);
+            report_error(
+                opt.report_errors,
+                "data does not fit into buffer".to_string(),
+                *loc,
+                cfg,
+                vartab,
+            );
             assert_failure(loc, None, ns, cfg, vartab);
 
             cfg.set_basic_block(in_bounds);
@@ -1812,6 +1844,13 @@ fn expr_builtin(
             );
 
             cfg.set_basic_block(out_of_bounds);
+            report_error(
+                opt.report_errors,
+                "read integer out of bounds".to_string(),
+                *loc,
+                cfg,
+                vartab,
+            );
             assert_failure(loc, None, ns, cfg, vartab);
 
             cfg.set_basic_block(in_bounds);
@@ -2009,6 +2048,13 @@ fn checking_trunc(
     );
 
     cfg.set_basic_block(out_of_bounds);
+    report_error(
+        opt.report_errors,
+        "truncate type overflow".to_string(),
+        *loc,
+        cfg,
+        vartab,
+    );
     assert_failure(loc, None, ns, cfg, vartab);
 
     cfg.set_basic_block(in_bounds);
@@ -2756,6 +2802,13 @@ fn array_subscript(
     );
 
     cfg.set_basic_block(out_of_bounds);
+    report_error(
+        opt.report_errors,
+        "array out of bounds".to_string(),
+        *loc,
+        cfg,
+        vartab,
+    );
     assert_failure(loc, None, ns, cfg, vartab);
 
     cfg.set_basic_block(in_bounds);
@@ -3059,4 +3112,22 @@ fn code(loc: &Loc, contract_no: usize, ns: &Namespace, opt: &Options) -> Express
     let size = Expression::NumberLiteral(*loc, Type::Uint(32), code.len().into());
 
     Expression::AllocDynamicBytes(*loc, Type::DynamicBytes, size.into(), Some(code))
+}
+
+pub(crate) fn report_error(
+    report_error: bool,
+    reason: String,
+    reason_loc: Loc,
+    cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+) {
+    if report_error {
+        cfg.add(
+            vartab,
+            Instr::DebugPrint {
+                string: reason,
+                loc: reason_loc,
+            },
+        );
+    }
 }
