@@ -178,7 +178,8 @@ impl AvailableExpressionSet {
             | Instr::Nop
             | Instr::ReturnCode { .. }
             | Instr::Branch { .. }
-            | Instr::PopMemory { .. } => {}
+            | Instr::PopMemory { .. }
+            | Instr::ReportError { .. } => {}
         }
     }
 
@@ -317,6 +318,7 @@ impl AvailableExpressionSet {
                 salt,
                 address,
                 seeds,
+                loc,
             } => {
                 let new_value = value
                     .as_ref()
@@ -345,6 +347,7 @@ impl AvailableExpressionSet {
                     salt: new_salt,
                     address: new_address,
                     seeds: new_seeds,
+                    loc: *loc,
                 }
             }
 

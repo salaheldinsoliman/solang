@@ -89,6 +89,7 @@ pub struct Options {
     pub generate_debug_information: bool,
     pub opt_level: OptimizationLevel,
     pub log_api_return_codes: bool,
+    pub log_runtime_errors: bool,
 }
 
 impl Default for Options {
@@ -103,6 +104,7 @@ impl Default for Options {
             generate_debug_information: false,
             opt_level: OptimizationLevel::Default,
             log_api_return_codes: false,
+            log_runtime_errors: false,
         }
     }
 }

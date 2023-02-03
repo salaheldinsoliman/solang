@@ -52,8 +52,8 @@ describe('Deploy primitives contract and test', () => {
 
         res = await query(conn, alice, contract, "opU64", [0, 1000, 4100]);
         expect(res.output?.toJSON()).toEqual(5100);
-        res = await query(conn, alice, contract, "opU64", [1, 1000, 4100]);
-        expect(res.output?.toString()).toEqual("18446744073709548516"); // (2^64)-18446744073709548516 = 3100
+        res = await query(conn, alice, contract, "opU64", [1, 4100, 1000]);
+        expect(res.output?.toString()).toEqual("3100"); // (2^64)-18446744073709548516 = 3100
         res = await query(conn, alice, contract, "opU64", [2, 123456789, 123456789]);
         expect(res.output?.toString()).toEqual("15241578750190521");
         res = await query(conn, alice, contract, "opU64", [3, 123456789, 100]);
@@ -85,8 +85,8 @@ describe('Deploy primitives contract and test', () => {
 
         res = await query(conn, alice, contract, "opU256", [0, 1000, 4100]);
         expect(res.output?.toJSON()).toEqual(5100);
-        res = await query(conn, alice, contract, "opU256", [1, 1000, 4100]);
-        expect(res.output?.toString()).toEqual('115792089237316195423570985008687907853269984665640564039457584007913129636836'); // (2^64)-18446744073709548516 = 3100
+        res = await query(conn, alice, contract, "opU256", [1, 4100, 1000]);
+        expect(res.output?.toString()).toEqual('3100'); // (2^64)-18446744073709548516 = 3100
         res = await query(conn, alice, contract, "opU256", [2, 123456789, 123456789]);
         expect(res.output?.toString()).toEqual('15241578750190521');
         res = await query(conn, alice, contract, "opU256", [3, 123456789, 100]);

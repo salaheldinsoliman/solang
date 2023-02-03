@@ -38,6 +38,7 @@ fn find_writable_vectors(
 ) {
     for instr_no in 0..block.instr.len() {
         match &block.instr[instr_no].1 {
+            Instr::ReportError { .. } => {}
             Instr::Set {
                 res,
                 expr: Expression::Variable(_, _, var_no),

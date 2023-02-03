@@ -10,6 +10,7 @@ mod arrays;
 mod builtins;
 mod calls;
 mod contracts;
+pub mod errors;
 mod events;
 mod first;
 mod format;
