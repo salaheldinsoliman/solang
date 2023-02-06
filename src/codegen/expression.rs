@@ -13,7 +13,7 @@ use crate::codegen::array_boundary::handle_array_assign;
 use crate::codegen::constructor::call_constructor;
 use crate::codegen::encoding::create_encoder;
 use crate::codegen::unused_variable::should_remove_assignment;
-use crate::codegen::{Builtin, Expression};
+use crate::codegen::{Builtin, Expression, RuntimeError};
 use crate::sema::{
     ast,
     ast::{
@@ -31,6 +31,7 @@ use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use solang_parser::pt;
 use solang_parser::pt::{CodeLocation, Loc};
 use std::{cmp::Ordering, ops::Mul};
+
 
 pub fn expression(
     expr: &ast::Expression,
@@ -1333,6 +1334,7 @@ fn require(
         },
     );
     cfg.set_basic_block(false_);
+
     let expr = args
         .get(1)
         .map(|s| expression(s, cfg, contract_no, func, ns, vartab, opt));
@@ -1349,7 +1351,7 @@ fn require(
                 println!("{:?}", expr);*/
                 debug_print(
                     opt.log_runtime_errors,
-                    (" require condition failed").to_string(),
+                    RuntimeError::String { string: " require condition failed".to_string()},
                     expr.loc(),
                     cfg,
                     vartab,
@@ -1357,7 +1359,7 @@ fn require(
             } else {
                 debug_print(
                     opt.log_runtime_errors,
-                    "require condition failed".to_string(),
+                    RuntimeError::String { string: "require condition failed".to_string() },
                     loc,
                     cfg,
                     vartab,
@@ -1744,7 +1746,7 @@ fn expr_builtin(
             cfg.set_basic_block(out_of_bounds);
             debug_print(
                 opt.log_runtime_errors,
-                "integer too large to write in buffer".to_string(),
+                RuntimeError::String { string: "integer too large to write in buffer".to_string()},
                 *loc,
                 cfg,
                 vartab,
@@ -1802,7 +1804,7 @@ fn expr_builtin(
             cfg.set_basic_block(out_ouf_bounds);
             debug_print(
                 opt.log_runtime_errors,
-                "data does not fit into buffer".to_string(),
+                RuntimeError::String { string: "data does not fit into buffer".to_string()},
                 *loc,
                 cfg,
                 vartab,
@@ -1877,7 +1879,7 @@ fn expr_builtin(
             cfg.set_basic_block(out_of_bounds);
             debug_print(
                 opt.log_runtime_errors,
-                "read integer out of bounds".to_string(),
+                RuntimeError::String { string: "read integer out of bounds".to_string()},
                 *loc,
                 cfg,
                 vartab,
@@ -2081,7 +2083,7 @@ fn checking_trunc(
     cfg.set_basic_block(out_of_bounds);
     debug_print(
         opt.log_runtime_errors,
-        "truncate type overflow".to_string(),
+        RuntimeError::String { string: "truncate type overflow".to_string()},
         *loc,
         cfg,
         vartab,
@@ -2835,7 +2837,7 @@ fn array_subscript(
     cfg.set_basic_block(out_of_bounds);
     debug_print(
         opt.log_runtime_errors,
-        "array out of bounds".to_string(),
+        RuntimeError::String { string: "array out of bounds".to_string()},
         *loc,
         cfg,
         vartab,
@@ -3147,7 +3149,7 @@ fn code(loc: &Loc, contract_no: usize, ns: &Namespace, opt: &Options) -> Express
 
 pub(crate) fn debug_print(
     report_error: bool,
-    reason: String,
+    runtime_error: RuntimeError,
     reason_loc: Loc,
     cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
@@ -3156,7 +3158,7 @@ pub(crate) fn debug_print(
         cfg.add(
             vartab,
             Instr::ReportError {
-                string: reason,
+                runtime_error,
                 loc: reason_loc,
             },
         );

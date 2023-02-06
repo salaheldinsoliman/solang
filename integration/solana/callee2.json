@@ -1,0 +1,59 @@
+{
+  "version": "0.2.1",
+  "name": "callee2",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "do_stuff",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "x",
+          "type": {
+            "array": [
+              "i64",
+              4
+            ]
+          }
+        }
+      ],
+      "returns": "i64"
+    },
+    {
+      "name": "do_stuff2",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "x",
+          "type": "string"
+        }
+      ],
+      "returns": "string"
+    }
+  ]
+}

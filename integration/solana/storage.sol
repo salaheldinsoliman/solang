@@ -49,11 +49,9 @@ contract store {
     }
 
     function do_ops() public {
-        // u64 will overflow to 1
-        u64 += 2;
+        u64 -= 2;
         u32 &= 0xffff;
-        // another overflow
-        i16 += 1;
+        i16 -= 1;
         i256 ^= 1;
         u256 *= 600;
         str = "";

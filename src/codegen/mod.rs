@@ -43,6 +43,14 @@ use num_rational::BigRational;
 use num_traits::{FromPrimitive, Zero};
 use solang_parser::{pt, pt::CodeLocation};
 
+#[derive(Clone)]
+pub enum RuntimeError{
+    String {string: String},
+    Expression {expr: Expression}
+}
+
+
+
 // The sizeof(struct account_data_header)
 pub const SOLANA_FIRST_OFFSET: u64 = 16;
 

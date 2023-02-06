@@ -1,0 +1,51 @@
+{
+  "version": "0.2.1",
+  "name": "Creature",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": true,
+          "isOptional": false
+        },
+        {
+          "name": "wallet",
+          "isMut": false,
+          "isSigner": true,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "payer",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "say_my_name",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    }
+  ],
+  "metadata": {
+    "address": "Cre7AzxtwSxXwU2jekYtCAQ57DkBhY9SjGDLdcrwhAo6"
+  }
+}

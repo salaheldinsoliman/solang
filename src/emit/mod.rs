@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::codegen::Expression;
+use crate::codegen::{Expression, RuntimeError};
 use crate::sema::ast::{CallTy, Function, Namespace, Parameter, Type};
 use std::collections::HashMap;
 use std::fmt;
@@ -12,6 +12,7 @@ use inkwell::types::IntType;
 use inkwell::values::{
     ArrayValue, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, IntValue, PointerValue,
 };
+use semver::Op;
 use solang_parser::pt::Loc;
 
 pub mod binary;
@@ -240,9 +241,10 @@ pub trait TargetRuntime<'a> {
     fn debug_print(
         &self,
         bin: &Binary,
-        reason_string: String,
+        reason_string: RuntimeError,
         reason_loc: Option<Loc>,
         ns: &Namespace,
+        expr: Option<Expression>
     );
 
     /// Return success without any result

@@ -7,7 +7,7 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::Zero;
 
-use super::expression::{debug_print, expression, load_storage};
+use super::expression::{debug_print, expression, load_storage, RuntimeError};
 use super::Options;
 use super::{
     cfg::{ControlFlowGraph, Instr},
@@ -212,7 +212,7 @@ pub fn storage_slots_array_pop(
     cfg.set_basic_block(empty_array);
     debug_print(
         opt.log_runtime_errors,
-        "pop from empty storage array".to_string(),
+        RuntimeError::String { string: "pop from empty storage array".to_string()},
         *loc,
         cfg,
         vartab,

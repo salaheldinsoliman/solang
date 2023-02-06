@@ -1,0 +1,206 @@
+{
+  "version": "0.2.1",
+  "name": "caller",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "do_call",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "e",
+          "type": "publicKey"
+        },
+        {
+          "name": "v",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "do_call2",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "e",
+          "type": "publicKey"
+        },
+        {
+          "name": "v",
+          "type": "i64"
+        }
+      ],
+      "returns": "i64"
+    },
+    {
+      "name": "do_call3",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "e",
+          "type": "publicKey"
+        },
+        {
+          "name": "e2",
+          "type": "publicKey"
+        },
+        {
+          "name": "x",
+          "type": {
+            "array": [
+              "i64",
+              4
+            ]
+          }
+        },
+        {
+          "name": "y",
+          "type": "string"
+        }
+      ],
+      "returns": {
+        "defined": "do_call3_returns"
+      }
+    },
+    {
+      "name": "do_call4",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "e",
+          "type": "publicKey"
+        },
+        {
+          "name": "e2",
+          "type": "publicKey"
+        },
+        {
+          "name": "x",
+          "type": {
+            "array": [
+              "i64",
+              4
+            ]
+          }
+        },
+        {
+          "name": "y",
+          "type": "string"
+        }
+      ],
+      "returns": {
+        "defined": "do_call4_returns"
+      }
+    },
+    {
+      "name": "who_am_i",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "publicKey"
+    }
+  ],
+  "types": [
+    {
+      "name": "do_call3_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function do_call3"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "return_0",
+            "type": "i64"
+          },
+          {
+            "name": "return_1",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "do_call4_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function do_call4"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "return_0",
+            "type": "i64"
+          },
+          {
+            "name": "return_1",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

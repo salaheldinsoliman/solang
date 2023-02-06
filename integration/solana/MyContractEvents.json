@@ -1,0 +1,78 @@
+{
+  "version": "0.2.1",
+  "name": "MyContractEvents",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "test",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "events": [
+    {
+      "name": "First",
+      "fields": [
+        {
+          "name": "a",
+          "type": "u32",
+          "index": true
+        },
+        {
+          "name": "b",
+          "type": "bool",
+          "index": false
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "Second",
+      "fields": [
+        {
+          "name": "a",
+          "type": "u32",
+          "index": true
+        },
+        {
+          "name": "b",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "c",
+          "type": "string",
+          "index": false
+        }
+      ]
+    }
+  ]
+}

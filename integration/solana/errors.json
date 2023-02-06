@@ -1,0 +1,36 @@
+{
+  "version": "0.2.1",
+  "name": "errors",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "do_revert",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "yes",
+          "type": "bool"
+        }
+      ],
+      "returns": "i256"
+    }
+  ]
+}

@@ -1,0 +1,487 @@
+{
+  "version": "0.2.1",
+  "name": "store",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_values",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "get_values1",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": "get_values1_returns"
+      }
+    },
+    {
+      "name": "get_values2",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": "get_values2_returns"
+      }
+    },
+    {
+      "name": "do_ops",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "push_zero",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "push",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "b",
+          "type": {
+            "array": [
+              "u8",
+              1
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "pop",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "array": [
+          "u8",
+          1
+        ]
+      }
+    },
+    {
+      "name": "get_bs",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "bytes"
+    },
+    {
+      "name": "get_both_foos",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": "get_both_foos_returns"
+      }
+    },
+    {
+      "name": "get_foo",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "first",
+          "type": "bool"
+        }
+      ],
+      "returns": {
+        "defined": "struct_foo"
+      }
+    },
+    {
+      "name": "set_foo2",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "f",
+          "type": {
+            "defined": "struct_foo"
+          }
+        },
+        {
+          "name": "v",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "set_foo1",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "delete_foo",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "first",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "struct_literal",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "types": [
+    {
+      "name": "enum_bar",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "bar1"
+          },
+          {
+            "name": "bar2"
+          },
+          {
+            "name": "bar3"
+          },
+          {
+            "name": "bar4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "inner_foo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "in1",
+            "type": "bool"
+          },
+          {
+            "name": "in2",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "struct_foo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "f1",
+            "type": {
+              "defined": "enum_bar"
+            }
+          },
+          {
+            "name": "f2",
+            "type": "bytes"
+          },
+          {
+            "name": "f3",
+            "type": "i64"
+          },
+          {
+            "name": "f4",
+            "type": {
+              "array": [
+                "u8",
+                3
+              ]
+            }
+          },
+          {
+            "name": "f5",
+            "type": "string"
+          },
+          {
+            "name": "f6",
+            "type": {
+              "defined": "inner_foo"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_values1_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function get_values1"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "return_0",
+            "type": "u64"
+          },
+          {
+            "name": "return_1",
+            "type": "u32"
+          },
+          {
+            "name": "return_2",
+            "type": "i16"
+          },
+          {
+            "name": "return_3",
+            "type": "i256"
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_values2_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function get_values2"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "return_0",
+            "type": "u256"
+          },
+          {
+            "name": "return_1",
+            "type": "string"
+          },
+          {
+            "name": "return_2",
+            "type": "bytes"
+          },
+          {
+            "name": "return_3",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "return_4",
+            "type": {
+              "defined": "enum_bar"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_both_foos_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function get_both_foos"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "return_0",
+            "type": {
+              "defined": "struct_foo"
+            }
+          },
+          {
+            "name": "return_1",
+            "type": {
+              "defined": "struct_foo"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

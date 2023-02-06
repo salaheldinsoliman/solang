@@ -1,0 +1,67 @@
+{
+  "version": "0.2.1",
+  "name": "Seed1",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": true,
+          "isOptional": false
+        },
+        {
+          "name": "wallet",
+          "isMut": false,
+          "isSigner": true,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "payer",
+          "type": "publicKey"
+        },
+        {
+          "name": "seed",
+          "type": "bytes"
+        },
+        {
+          "name": "bump",
+          "type": {
+            "array": [
+              "u8",
+              1
+            ]
+          }
+        },
+        {
+          "name": "space",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "say_hello",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    }
+  ],
+  "metadata": {
+    "address": "SeedHw4CsFsDEGu2AVwFM1toGXsbAJSKnb7kS8TrLxu"
+  }
+}

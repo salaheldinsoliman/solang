@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::codegen::cfg::{HashTy, ReturnCode};
-use crate::codegen::{Builtin, Expression};
+use crate::codegen::{Builtin, Expression, RuntimeError};
 use crate::emit::binary::Binary;
 use crate::emit::math::{build_binary_op_with_overflow_check, multiply, power};
 use crate::emit::strings::{format_string, string_location};
@@ -1974,10 +1974,34 @@ fn string_to_basic_value<'a>(
 pub(super) fn print_runtime_error<'a>(
     bin: &Binary<'a>,
     ns: &Namespace,
-    error: &String,
+    runtime_error: RuntimeError,
     loc: Option<Loc>,
 ) -> BasicValueEnum<'a> {
-    let error_with_line = if let Some(loc) = loc {
+
+    let loc_string = 
+    if let Some(loc) = loc {
+    match loc {
+        Loc::File(..) => {
+            let file_no = loc.file_no();
+            let curr_file = &ns.files[file_no];
+            let (line_no, offset) = curr_file.offset_to_line_column(loc.start());
+            format!(
+                " in file: {:?}, line: {},{}",
+                file_no,
+                line_no + 1,
+                offset
+            )
+        }
+        Loc::Codegen => {
+            format!(" in codegen")
+        }
+        _ => "".to_string(),
+    }
+}
+else {
+    "".to_string()
+};
+    /*let error_with_line = if let Some(loc) = loc {
         match loc {
             Loc::File(..) => {
                 let file_no = loc.file_no();
@@ -2000,5 +2024,20 @@ pub(super) fn print_runtime_error<'a>(
         error.to_string()
     };
 
-    string_to_basic_value(bin, ns, error_with_line)
+    string_to_basic_value(bin, ns, error_with_line)*/
+
+    let error_with_line = match runtime_error {
+
+        RuntimeError::String{ string: error } => {
+            format!("{error} {loc_string}");
+            string_to_basic_value(bin, ns, loc_string)
+        }
+
+        RuntimeError::Expression { expr } => {
+            
+
+
+        }
+
+    };
 }

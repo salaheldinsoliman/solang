@@ -1,0 +1,425 @@
+{
+  "version": "0.2.1",
+  "name": "SimpleCollectible",
+  "instructions": [
+    {
+      "name": "get_token_account_data",
+      "docs": [
+        "notice: Fetch the owner, mint account and balance for an associated token account.",
+        "param: The token account",
+        "return: struct TokenAccountData"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "tokenaccount",
+          "type": "publicKey"
+        }
+      ],
+      "returns": {
+        "defined": "TokenAccountData"
+      }
+    },
+    {
+      "name": "get_mint_account_data",
+      "docs": [
+        "notice: Retrieve the information saved in a mint account",
+        "param: the account whose information we want to retrive",
+        "return: the MintAccountData struct"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "mintaccount",
+          "type": "publicKey"
+        }
+      ],
+      "returns": {
+        "defined": "MintAccountData"
+      }
+    },
+    {
+      "name": "remove_mint_authority",
+      "docs": [
+        "notice: Remove the mint authority from a mint account",
+        "param: the public key for the mint account",
+        "param: the public for the mint authority"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "mintaccount",
+          "type": "publicKey"
+        },
+        {
+          "name": "mintauthority",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "mintaccount",
+          "type": "publicKey"
+        },
+        {
+          "name": "metadataauthority",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "createCollectible",
+      "docs": [
+        "notice: Create a new NFT and associate it to an URI",
+        "param: a URI that leads to the NFT resource",
+        "param: an account that signs each new mint",
+        "param: the owner associated token account"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "tokenuri",
+          "type": "string"
+        },
+        {
+          "name": "mintauthority",
+          "type": "publicKey"
+        },
+        {
+          "name": "ownertokenaccount",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "transferOwnership",
+      "docs": [
+        "notice: Transfer ownership of this NFT from one account to another\nThis function only wraps the innate SPL transfer, which can be used outside this contract.\nHowever, the difference here is the event 'NFTSold' exclusive to this function",
+        "param: the token account for the current owner",
+        "param: the token account for the new owner"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "oldtokenaccount",
+          "type": "publicKey"
+        },
+        {
+          "name": "newtokenaccount",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "getNftUri",
+      "docs": [
+        "notice: Return the URI of this NFT"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    },
+    {
+      "name": "isOwner",
+      "docs": [
+        "notice: Check if an NFT is owned by @param owner",
+        "param: the account whose ownership we want to verify",
+        "param: the owner's associated token account"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "owner",
+          "type": "publicKey"
+        },
+        {
+          "name": "tokenaccount",
+          "type": "publicKey"
+        }
+      ],
+      "returns": "bool"
+    },
+    {
+      "name": "updateNftUri",
+      "docs": [
+        "notice: Updates the NFT URI\nThe metadata authority must sign the transaction so that the update can succeed.",
+        "param: a new URI for the NFT"
+      ],
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "newuri",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "name": "AccountState",
+      "docs": [
+        "notice: This enum represents the state of a token account"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Uninitialized"
+          },
+          {
+            "name": "Initialized"
+          },
+          {
+            "name": "Frozen"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenAccountData",
+      "docs": [
+        "notice: This struct is the return of 'get_token_account_data'"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mintAccount",
+            "type": "publicKey"
+          },
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "balance",
+            "type": "u64"
+          },
+          {
+            "name": "delegate_present",
+            "type": "bool"
+          },
+          {
+            "name": "delegate",
+            "type": "publicKey"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": "AccountState"
+            }
+          },
+          {
+            "name": "is_native_present",
+            "type": "bool"
+          },
+          {
+            "name": "is_native",
+            "type": "u64"
+          },
+          {
+            "name": "delegated_amount",
+            "type": "u64"
+          },
+          {
+            "name": "close_authority_present",
+            "type": "bool"
+          },
+          {
+            "name": "close_authority",
+            "type": "publicKey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintAccountData",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority_present",
+            "type": "bool"
+          },
+          {
+            "name": "mint_authority",
+            "type": "publicKey"
+          },
+          {
+            "name": "supply",
+            "type": "u64"
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "is_initialized",
+            "type": "bool"
+          },
+          {
+            "name": "freeze_authority_present",
+            "type": "bool"
+          },
+          {
+            "name": "freeze_authority",
+            "type": "publicKey"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "NFTMinted",
+      "fields": [
+        {
+          "name": "owner",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "mintAccount",
+          "type": "publicKey",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "NFTSold",
+      "fields": [
+        {
+          "name": "from",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "to",
+          "type": "publicKey",
+          "index": false
+        }
+      ]
+    }
+  ]
+}

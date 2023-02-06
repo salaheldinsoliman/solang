@@ -1277,7 +1277,7 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
         Instr::ReturnCode { code } => {
             target.return_code(bin, bin.return_values[code]);
         }
-        Instr::ReportError { string, loc } => {
+        Instr::ReportError {runtime_error, loc } => {
             emit_context!(bin);
             target.debug_print(bin, string.to_owned(), Some(*loc), ns);
         }

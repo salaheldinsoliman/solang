@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use super::expression::RuntimeError;
 use super::statements::{statement, LoopScopes};
 use super::{
     constant_folding, dead_storage,
@@ -194,7 +195,7 @@ pub enum Instr {
     ReturnCode { code: ReturnCode },
     /// Report the runtime error before reaching aborting execution (AssertFailure).
     /// If Instr::Print is used, the error string and location must be turned to an Expression first.
-    ReportError { string: String, loc: Loc },
+    ReportError {runtime_error: RuntimeError, loc: Loc },
 }
 
 /// This struct defined the return codes that we send to the execution environment when we return
@@ -1273,8 +1274,11 @@ impl ControlFlowGraph {
                 format!("return code: {code}")
             }
 
-            Instr::ReportError { string , loc:_} => {
-                format!("debug message: {string}")
+            Instr::ReportError { runtime_error , loc:_} => {
+                match runtime_error {
+                    RuntimeError::String{string} => {format!("debug message: {string}")},
+                    RuntimeError::Expression{expr} => {format!("debug message: {}", self.expr_to_string(contract, ns, expr) )}
+                }
             }
         }
     }

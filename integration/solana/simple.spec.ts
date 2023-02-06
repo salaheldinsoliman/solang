@@ -48,8 +48,8 @@ describe('Simple solang tests', function () {
 
         res = await program.methods.opU64({ add: {} }, new BN(1000), new BN(4100)).accounts({ dataAccount: storage.publicKey }).view();
         expect(Number(res)).toBe(5100);
-        res = await program.methods.opU64({ sub: {} }, new BN(1000), new BN(4100)).accounts({ dataAccount: storage.publicKey }).view();
-        expect(Number(res)).toBe(18446744073709548516); // (2^64)-18446744073709548516 = 3100
+        res = await program.methods.opU64({ sub: {} }, new BN(4100), new BN(1000)).accounts({ dataAccount: storage.publicKey }).view();
+        expect(Number(res)).toBe(3100);
         res = await program.methods.opU64({ mul: {} }, new BN(123456789), new BN(123456789)).accounts({ dataAccount: storage.publicKey }).view();
         expect(Number(res)).toBe(15241578750190521);
         res = await program.methods.opU64({ div: {} }, new BN(123456789), new BN(100)).accounts({ dataAccount: storage.publicKey }).view();
@@ -81,8 +81,8 @@ describe('Simple solang tests', function () {
 
         res = await program.methods.opU256({ add: {} }, new BN(1000), new BN(4100)).accounts({ dataAccount: storage.publicKey }).view();
         expect(Number(res)).toBe(5100);
-        res = await program.methods.opU256({ sub: {} }, new BN(1000), new BN(4100)).accounts({ dataAccount: storage.publicKey }).view();
-        expect(Number(res)).toBe(115792089237316195423570985008687907853269984665640564039457584007913129636836); // (2^64)-18446744073709548516 = 3100
+        res = await program.methods.opU256({ sub: {} }, new BN(4100), new BN(1000)).accounts({ dataAccount: storage.publicKey }).view();
+        expect(Number(res)).toBe(3100); // (2^64)-18446744073709548516 = 3100
         res = await program.methods.opU256({ mul: {} }, new BN(123456789), new BN(123456789)).accounts({ dataAccount: storage.publicKey }).view();
         expect(Number(res)).toBe(15241578750190521);
         res = await program.methods.opU256({ div: {} }, new BN(123456789), new BN(100)).accounts({ dataAccount: storage.publicKey }).view();
@@ -163,7 +163,7 @@ describe('Simple solang tests', function () {
         expect(res.return2).toEqual(Buffer.from("b00b1e", "hex"));
         expect(res.return3).toEqual([0, 0, 0, 0]);
         expect(Number(res.return4.bar1)).toBeDefined();
-
+        
         await program.methods.setValues().accounts({ dataAccount: storage.publicKey }).rpc();
 
         res = await program.methods.getValues1().accounts({ dataAccount: storage.publicKey }).view();
@@ -172,7 +172,7 @@ describe('Simple solang tests', function () {
         expect(Number(res.return1)).toEqual(0xdad0feef);
         expect(Number(res.return2)).toEqual(0x7ffe);
         expect(BigInt(res.return3)).toEqual(57896044618658097711785492504343953926634992332820282019728792003956564819967n);
-
+        
         res = await program.methods.getValues2().accounts({ dataAccount: storage.publicKey }).view();
 
         expect(Number(res.return0)).toEqual(102);
@@ -180,14 +180,14 @@ describe('Simple solang tests', function () {
         expect(res.return2).toEqual(Buffer.from("b00b1e", "hex"));
         expect(res.return3).toEqual([0x41, 0x42, 0x43, 0x44]);
         expect(Number(res.return4.bar2)).toBeDefined();
-
+        
         await program.methods.doOps().accounts({ dataAccount: storage.publicKey }).rpc();
 
         res = await program.methods.getValues1().accounts({ dataAccount: storage.publicKey }).view();
 
-        expect(BigInt(res.return0)).toEqual(1n);
+        expect(BigInt(res.return0)).toEqual(18446744073709551613n);
         expect(Number(res.return1)).toEqual(65263);
-        expect(Number(res.return2)).toEqual(32767);
+        expect(Number(res.return2)).toEqual(32765);
         expect(BigInt(res.return3)).toEqual(57896044618658097711785492504343953926634992332820282019728792003956564819966n);
 
         res = await program.methods.getValues2().accounts({ dataAccount: storage.publicKey }).view();

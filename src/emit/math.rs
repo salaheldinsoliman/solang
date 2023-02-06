@@ -199,7 +199,7 @@ fn signed_ovf_detect<'b, 'a: 'b, T: TargetRuntime<'a> + ?Sized>(
 
     bin.builder.position_at_end(error_block);
 
-    target.debug_print(bin, "multiplication overflow".to_string(), Some(loc), ns);
+    target.debug_print(bin, RuntimeError::String { string: "multiplication overflow".to_string()}, Some(loc), ns);
     target.assert_failure(
         bin,
         bin.context

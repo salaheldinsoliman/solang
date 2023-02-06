@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::codegen::RuntimeError;
 use crate::codegen::cfg::{HashTy, ReturnCode};
 use crate::emit::binary::Binary;
 use crate::emit::expression::{expression, print_runtime_error};
@@ -2436,7 +2437,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
     fn debug_print(
         &self,
         bin: &Binary,
-        reason_string: String,
+        reason_string: RuntimeError,
         reason_loc: Option<Loc>,
         ns: &Namespace,
     ) {

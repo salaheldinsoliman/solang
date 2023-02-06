@@ -1,0 +1,220 @@
+{
+  "version": "0.2.1",
+  "name": "Events",
+  "instructions": [
+    {
+      "name": "name",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    },
+    {
+      "name": "surname",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    },
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "setName",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "setSurname",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "surname",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "getNames",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": "getNames_returns"
+      }
+    },
+    {
+      "name": "getName",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    },
+    {
+      "name": "getSurname",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": "string"
+    }
+  ],
+  "types": [
+    {
+      "name": "getNames_returns",
+      "docs": [
+        "Data structure to hold the multiple returns of function getNames"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "_name",
+            "type": "string"
+          },
+          {
+            "name": "_surname",
+            "type": "string"
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "NameChanced",
+      "fields": [
+        {
+          "name": "message",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "newName",
+          "type": "string",
+          "index": false
+        }
+      ]
+    },
+    {
+      "name": "SurnameChanced",
+      "fields": [
+        {
+          "name": "message",
+          "type": "string",
+          "index": false
+        },
+        {
+          "name": "newSurname",
+          "type": "string",
+          "index": false
+        }
+      ]
+    }
+  ]
+}

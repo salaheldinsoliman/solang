@@ -1,0 +1,406 @@
+{
+  "version": "0.2.1",
+  "name": "primitives",
+  "instructions": [
+    {
+      "name": "new",
+      "accounts": [
+        {
+          "name": "dataAccount",
+          "isMut": true,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "is_mul",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        }
+      ],
+      "returns": "bool"
+    },
+    {
+      "name": "return_div",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": "oper"
+      }
+    },
+    {
+      "name": "op_i64",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": "i64"
+        },
+        {
+          "name": "b",
+          "type": "i64"
+        }
+      ],
+      "returns": "i64"
+    },
+    {
+      "name": "op_u64",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": "u64"
+        },
+        {
+          "name": "b",
+          "type": "u64"
+        }
+      ],
+      "returns": "u64"
+    },
+    {
+      "name": "op_u256",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": "u256"
+        },
+        {
+          "name": "b",
+          "type": "u256"
+        }
+      ],
+      "returns": "u256"
+    },
+    {
+      "name": "op_i256",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": "i256"
+        },
+        {
+          "name": "b",
+          "type": "i256"
+        }
+      ],
+      "returns": "i256"
+    },
+    {
+      "name": "return_u8_6",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [],
+      "returns": {
+        "array": [
+          "u8",
+          6
+        ]
+      }
+    },
+    {
+      "name": "op_u8_5_shift",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": {
+            "array": [
+              "u8",
+              5
+            ]
+          }
+        },
+        {
+          "name": "r",
+          "type": "u64"
+        }
+      ],
+      "returns": {
+        "array": [
+          "u8",
+          5
+        ]
+      }
+    },
+    {
+      "name": "op_u8_5",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": {
+            "array": [
+              "u8",
+              5
+            ]
+          }
+        },
+        {
+          "name": "b",
+          "type": {
+            "array": [
+              "u8",
+              5
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "array": [
+          "u8",
+          5
+        ]
+      }
+    },
+    {
+      "name": "op_u8_14_shift",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": {
+            "array": [
+              "u8",
+              14
+            ]
+          }
+        },
+        {
+          "name": "r",
+          "type": "u64"
+        }
+      ],
+      "returns": {
+        "array": [
+          "u8",
+          14
+        ]
+      }
+    },
+    {
+      "name": "op_u8_14",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "op",
+          "type": {
+            "defined": "oper"
+          }
+        },
+        {
+          "name": "a",
+          "type": {
+            "array": [
+              "u8",
+              14
+            ]
+          }
+        },
+        {
+          "name": "b",
+          "type": {
+            "array": [
+              "u8",
+              14
+            ]
+          }
+        }
+      ],
+      "returns": {
+        "array": [
+          "u8",
+          14
+        ]
+      }
+    },
+    {
+      "name": "address_passthrough",
+      "accounts": [
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false,
+          "isOptional": false
+        }
+      ],
+      "args": [
+        {
+          "name": "a",
+          "type": "publicKey"
+        }
+      ],
+      "returns": "publicKey"
+    }
+  ],
+  "types": [
+    {
+      "name": "oper",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "add"
+          },
+          {
+            "name": "sub"
+          },
+          {
+            "name": "mul"
+          },
+          {
+            "name": "div"
+          },
+          {
+            "name": "mod"
+          },
+          {
+            "name": "pow"
+          },
+          {
+            "name": "shl"
+          },
+          {
+            "name": "shr"
+          },
+          {
+            "name": "or"
+          },
+          {
+            "name": "and"
+          },
+          {
+            "name": "xor"
+          }
+        ]
+      }
+    }
+  ]
+}
