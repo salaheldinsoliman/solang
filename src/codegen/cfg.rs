@@ -49,13 +49,9 @@ pub enum Instr {
         args: Vec<Expression>,
     },
     /// Return
-    Return {
-        value: Vec<Expression>,
-    },
+    Return { value: Vec<Expression> },
     /// Jump unconditionally
-    Branch {
-        block: usize,
-    },
+    Branch { block: usize },
     /// Jump conditionally
     BranchCond {
         cond: Expression,
@@ -63,18 +59,11 @@ pub enum Instr {
         false_block: usize,
     },
     /// Set array element in memory
-    Store {
-        dest: Expression,
-        data: Expression,
-    },
+    Store { dest: Expression, data: Expression },
     /// Abort execution
-    AssertFailure {
-        encoded_args: Option<Expression>,
-    },
+    AssertFailure { encoded_args: Option<Expression> },
     /// Print to log message
-    Print {
-        expr: Expression,
-    },
+    Print { expr: Expression },
     /// Load storage (this is an instruction rather than an expression
     /// so that it can be moved around by the dead storage pass
     LoadStorage {
@@ -83,10 +72,7 @@ pub enum Instr {
         storage: Expression,
     },
     /// Clear storage at slot for ty (might span multiple slots)
-    ClearStorage {
-        ty: Type,
-        storage: Expression,
-    },
+    ClearStorage { ty: Type, storage: Expression },
     /// Set storage value at slot
     SetStorage {
         ty: Type,
@@ -173,9 +159,7 @@ pub enum Instr {
     /// Insert unreachable instruction after e.g. self-destruct
     Unreachable,
     /// Self destruct
-    SelfDestruct {
-        recipient: Expression,
-    },
+    SelfDestruct { recipient: Expression },
     /// Emit event
     EmitEvent {
         event_no: usize,
@@ -207,15 +191,10 @@ pub enum Instr {
         data_len: Expression,
     },
     /// Return a code at the end of a function
-    ReturnCode {
-        code: ReturnCode,
-    },
+    ReturnCode { code: ReturnCode },
     /// Report the runtime error before reaching aborting execution (AssertFailure).
     /// If Instr::Print is used, the error string and location must be turned to an Expression first.
-    ReportError {
-        string: String,
-        loc: Loc,
-    },
+    ReportError { string: String, loc: Loc },
 }
 
 /// This struct defined the return codes that we send to the execution environment when we return

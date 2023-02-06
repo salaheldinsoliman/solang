@@ -1319,7 +1319,7 @@ fn require(
     ns: &Namespace,
     vartab: &mut Vartable,
     opt: &Options,
-    loc: Loc
+    loc: Loc,
 ) -> Expression {
     let true_ = cfg.new_basic_block("noassert".to_owned());
     let false_ = cfg.new_basic_block("doassert".to_owned());
@@ -1340,7 +1340,6 @@ fn require(
         // On Solana and Substrate, print the reason, do not abi encoding it
         Target::Solana | Target::Substrate { .. } => {
             if let Some(expr) = expr {
-
                 /*let error_string = if let Expression::AllocDynamicBytes(_, _, _, bytes) = expr {
                     std::str::from_utf8(&bytes.unwrap())
                 }

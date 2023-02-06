@@ -1979,7 +1979,8 @@ pub(super) fn print_runtime_error<'a>(
 ) -> BasicValueEnum<'a> {
     let error_with_line = if let Some(loc) = loc {
         match loc {
-            Loc::File(.. ) => {let file_no = loc.file_no();
+            Loc::File(..) => {
+                let file_no = loc.file_no();
                 let curr_file = &ns.files[file_no];
                 let (line_no, offset) = curr_file.offset_to_line_column(loc.start());
                 format!(
@@ -1988,11 +1989,12 @@ pub(super) fn print_runtime_error<'a>(
                     file_no,
                     line_no + 1,
                     offset
-                )},
+                )
+            }
             Loc::Codegen => {
                 format!("{error} in  codegen")
-            },
-            _ => error.to_string()
+            }
+            _ => error.to_string(),
         }
     } else {
         error.to_string()
