@@ -96,7 +96,6 @@ pub struct Doc {
 
 #[derive(Args, Debug, Deserialize)]
 pub struct Compile {
-
     #[clap(flatten)]
     pub package: Package,
 
@@ -255,7 +254,7 @@ pub fn imports_arg(package: &Package) -> FileResolver {
 
     if let Some(paths) = &package.import_path {
         for path in paths {
-            if let Err(e) = resolver.add_import_path(&path) {
+            if let Err(e) = resolver.add_import_path(path) {
                 eprintln!("error: import path '{}': {}", path.to_string_lossy(), e);
                 exit(1);
             }

@@ -22,7 +22,8 @@ use std::{
 };
 
 use crate::cli::{
-    imports_arg, options_arg, target_arg, Cli, Commands, Compile, Doc, ShellComplete, CompilerOutput
+    imports_arg, options_arg, target_arg, Cli, Commands, Compile, CompilerOutput, Doc,
+    ShellComplete,
 };
 
 mod cli;
@@ -41,7 +42,7 @@ fn main() {
         }
         Commands::LanguageServer(server_args) => languageserver::start_server(&server_args),
 
-        Commands::IdlCommand(idl_args) => {idl::idl(&idl_args)}
+        Commands::IdlCommand(idl_args) => idl::idl(&idl_args),
     }
 }
 
@@ -110,7 +111,7 @@ fn compile(compile_args: &Compile) {
     for filename in &compile_args.package.input {
         // TODO: this could be parallelized using e.g. rayon
         let ns = process_file(
-            &filename,
+            filename,
             &mut resolver,
             target,
             &compile_args.compiler_output,
@@ -137,12 +138,7 @@ fn compile(compile_args: &Compile) {
         }
     }
 
-    if let Some("ast-dot") = compile_args
-        .compiler_output
-        .emit
-        .as_ref()
-        .map(String::as_str)
-    {
+    if let Some("ast-dot") = compile_args.compiler_output.emit.as_deref() {
         exit(0);
     }
 
@@ -209,7 +205,7 @@ fn output_file(compiler_output: &CompilerOutput, stem: &str, ext: &str, meta: bo
         compiler_output
             .output_meta
             .as_ref()
-            .or_else(|| compiler_output.output_directory.as_ref())
+            .or(compiler_output.output_directory.as_ref())
     } else {
         compiler_output.output_directory.as_ref()
     };
@@ -231,7 +227,7 @@ fn process_file(
     // codegen all the contracts; some additional errors/warnings will be detected here
     codegen(&mut ns, opt);
 
-    if let Some("ast-dot") = compiler_output.emit.as_ref().map(String::as_str) {
+    if let Some("ast-dot") = compiler_output.emit.as_deref() {
         let filepath = PathBuf::from(filename);
         let stem = filepath.file_stem().unwrap().to_string_lossy();
         let dot_filename = output_file(compiler_output, &stem, "dot", false);
@@ -290,7 +286,7 @@ fn contract_results(
 
     seen_contracts.insert(resolved_contract.name.to_string(), loc);
 
-    if let Some("cfg") = compiler_output.emit.as_ref().map(String::as_str) {
+    if let Some("cfg") = compiler_output.emit.as_deref() {
         println!("{}", resolved_contract.print_cfg(ns));
         return;
     }
@@ -372,7 +368,7 @@ fn save_intermediates(
 ) -> bool {
     let verbose = compiler_output.verbose;
 
-    match compiler_output.emit.as_ref().map(String::as_str) {
+    match compiler_output.emit.as_deref() {
         Some("llvm-ir") => {
             let llvm_filename = output_file(compiler_output, &binary.name, "ll", false);
 
