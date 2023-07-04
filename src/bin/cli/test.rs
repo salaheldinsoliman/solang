@@ -7,6 +7,8 @@ mod tests {
     use clap::{CommandFactory, Parser};
     use solang::codegen::Options;
     use std::path::PathBuf;
+    use sp_core::{crypto, sr25519, ed25519 , ecdsa, Pair as TraitPair, crypto::Ss58Codec, ByteArray};
+    use hex;
 
     #[test]
     fn test() {
@@ -262,4 +264,24 @@ mod tests {
             }
         );
     }
+
+
+    #[test]
+    fn target_config_from_parachain() {
+
+      
+        let pair : sr25519::Pair = sp_core::Pair::from_seed(b"12345678901234567890123456789012");
+		let public = pair.public();
+		let polkadot_format = crypto::Ss58AddressFormatRegistry::PolkadotAccount.into();
+        let moonbeam_format = crypto::Ss58AddressFormatRegistry::MoonbeamAccount.into();
+
+		let address_polkadot =  public.to_ss58check_with_version(polkadot_format);
+        let address_moonbeam = public.to_ss58check_with_version(moonbeam_format);
+
+        println!("{address_polkadot}");
+        println!("{address_moonbeam}");
+        }
+
+
+
 }
