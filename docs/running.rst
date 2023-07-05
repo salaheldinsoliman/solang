@@ -203,6 +203,10 @@ Options:
   Change the default value length on Polkadot. By default, Substate uses an value type of 16 bytes. This option
   is ignored for any other target.
 
+\-\-hash\-length *length-in-bytes*
+  Change the default hash length on Polkadot. By default, Substate uses an value type of 32 bytes. This option
+  is ignored for any other target.
+
 \-\-importpath *directory*
   When resolving ``import`` directives, search this directory. By default ``import``
   will only search the current working directory. This option can be specified multiple times
