@@ -679,6 +679,8 @@ pub struct Namespace {
     pub address_length: usize,
     /// value length in bytes
     pub value_length: usize,
+    /// hash length in bytes
+    pub hash_length: usize,
     pub diagnostics: Diagnostics,
     /// There is a separate namespace for functions and non-functions
     pub function_symbols: HashMap<(usize, Option<usize>, String), Symbol>,

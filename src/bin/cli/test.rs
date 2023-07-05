@@ -187,7 +187,8 @@ mod tests {
                 target_arg: cli::CompileTargetArg {
                     name: Some("solana".to_owned()),
                     address_length: None,
-                    value_length: None
+                    value_length: None,
+                    hash_length: None
                 },
                 debug_features: cli::DebugFeatures {
                     log_api_return_codes: true,
@@ -209,7 +210,7 @@ mod tests {
             }
         );
 
-        let command = "solang compile flipper.sol sesa.sol --config-file solang.toml --target polkadot --value-length=31 --address-length=33 --no-dead-storage --no-constant-folding --no-strength-reduce --no-vector-to-slice --no-cse -O aggressive".split(' ');
+        let command = "solang compile flipper.sol sesa.sol --config-file solang.toml --target polkadot --value-length=31 --address-length=33 --no-dead-storage --no-constant-folding --no-strength-reduce --no-vector-to-slice --no-cse -O aggressive --hash-length 40".split(' ');
 
         let matches = Cli::command().get_matches_from(command);
 
@@ -240,7 +241,8 @@ mod tests {
                 target_arg: cli::CompileTargetArg {
                     name: Some("polkadot".to_owned()),
                     address_length: Some(33),
-                    value_length: Some(31)
+                    value_length: Some(31),
+                    hash_length: Some(40)
                 },
                 debug_features: cli::DebugFeatures {
                     log_api_return_codes: true,

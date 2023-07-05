@@ -1003,7 +1003,7 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
             }
             ast::CallTy::Delegate => {
                 // delegate_call asks for a code hash instead of an address
-                let hash_len = i32_const!(32); // FIXME: This is configurable like the address length
+                let hash_len = i32_const!(ns.hash_length as u64);
                 let code_hash_out_ptr = binary.builder.build_array_alloca(
                     binary.context.i8_type(),
                     hash_len,

@@ -28,13 +28,14 @@ use std::collections::HashMap;
 impl Namespace {
     /// Create a namespace and populate with the parameters for the target
     pub fn new(target: Target) -> Self {
-        let (address_length, value_length) = match target {
-            Target::EVM => (20, 16),
+        let (address_length, value_length, hash_length) = match target {
+            Target::EVM => (20, 16, 32),
             Target::Polkadot {
                 address_length,
                 value_length,
-            } => (address_length, value_length),
-            Target::Solana => (32, 8),
+                hash_length,
+            } => (address_length, value_length, hash_length),
+            Target::Solana => (32, 8, 32),
         };
 
         let mut ns = Namespace {
@@ -52,6 +53,7 @@ impl Namespace {
             constants: Vec::new(),
             address_length,
             value_length,
+            hash_length,
             variable_symbols: HashMap::new(),
             function_symbols: HashMap::new(),
             diagnostics: Diagnostics::default(),

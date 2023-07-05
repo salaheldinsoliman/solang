@@ -262,6 +262,9 @@ pub struct TargetArg {
 
     #[arg(name = "VALUE_LENGTH", help = "Value length on the Polkadot Parachain", long = "value-length", num_args = 1, value_parser = value_parser!(u64).range(4..1024))]
     pub value_length: Option<u64>,
+
+    #[arg(name = "HASH_LENGTH", help = "Hash length on the Polkadot Parachain", long = "hash-length", num_args = 1, value_parser = value_parser!(u64).range(4..1024))]
+    pub hash_length: Option<u64>,
 }
 
 #[derive(Args, Deserialize, Debug, PartialEq)]
@@ -274,6 +277,9 @@ pub struct CompileTargetArg {
 
     #[arg(name = "VALUE_LENGTH", help = "Value length on the Polkadot Parachain", long = "value-length", num_args = 1, value_parser = value_parser!(u64).range(4..1024))]
     pub value_length: Option<u64>,
+
+    #[arg(name = "HASH_LENGTH", help = "Hash length on the Polkadot Parachain", long = "hash-length", num_args = 1, value_parser = value_parser!(u64).range(4..1024))]
+    pub hash_length: Option<u64>,
 }
 
 #[derive(Args)]
@@ -387,6 +393,7 @@ pub trait TargetArgTrait {
     fn get_name(&self) -> &String;
     fn get_address_length(&self) -> &Option<u64>;
     fn get_value_length(&self) -> &Option<u64>;
+    fn get_hash_length(&self) -> &Option<u64>;
 }
 
 impl TargetArgTrait for TargetArg {
@@ -400,6 +407,10 @@ impl TargetArgTrait for TargetArg {
 
     fn get_value_length(&self) -> &Option<u64> {
         &self.value_length
+    }
+
+    fn get_hash_length(&self) -> &Option<u64> {
+        &self.hash_length
     }
 }
 
@@ -419,6 +430,10 @@ impl TargetArgTrait for CompileTargetArg {
 
     fn get_value_length(&self) -> &Option<u64> {
         &self.value_length
+    }
+
+    fn get_hash_length(&self) -> &Option<u64> {
+        &self.hash_length
     }
 }
 
@@ -442,6 +457,7 @@ pub(crate) fn target_arg<T: TargetArgTrait>(target_arg: &T) -> Target {
         "polkadot" => solang::Target::Polkadot {
             address_length: target_arg.get_address_length().unwrap_or(32) as usize,
             value_length: target_arg.get_value_length().unwrap_or(16) as usize,
+            hash_length: target_arg.get_hash_length().unwrap_or(32) as usize,
         },
         "evm" => solang::Target::EVM,
         _ => unreachable!(),

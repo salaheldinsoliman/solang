@@ -28,6 +28,7 @@ pub enum Target {
     Polkadot {
         address_length: usize,
         value_length: usize,
+        hash_length: usize,
     },
     /// Ethereum EVM, see <https://ethereum.org/en/developers/docs/evm/>
     EVM,
@@ -66,6 +67,7 @@ impl Target {
         Target::Polkadot {
             address_length: 32,
             value_length: 16,
+            hash_length: 32,
         }
     }
 
