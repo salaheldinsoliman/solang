@@ -14,6 +14,7 @@ use solang::{
     Target,
 };
 use solang_parser::pt;
+use tower_lsp::jsonrpc;
 use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 use tokio::sync::Mutex;
 use tower_lsp::{
@@ -32,8 +33,10 @@ use tower_lsp::{
     },
     Client, LanguageServer, LspService, Server,
 };
+use std::sync::Arc;
 
 use crate::cli::{target_arg, LanguageServerCommand};
+use async_std;
 
 // Represents the type of the object that a reference points to
 // Here "object" refers to contracts, functions, structs, enums etc., that are defined and used within a namespace.

@@ -2,11 +2,7 @@
 
 pub mod abi;
 pub mod codegen;
-#[cfg(feature = "llvm")]
-pub mod emit;
 pub mod file_resolver;
-#[cfg(feature = "llvm")]
-mod linker;
 pub mod standard_json;
 
 // In Sema, we use result unit for returning early
@@ -115,7 +111,7 @@ impl Target {
 /// compiler warnings, errors and informational messages are also provided.
 ///
 /// The ctx is the inkwell llvm context.
-#[cfg(feature = "llvm")]
+/*#[cfg(feature = "llvm")]
 pub fn compile(
     filename: &OsStr,
     resolver: &mut FileResolver,
@@ -153,7 +149,7 @@ pub fn compile(
     }
 
     (results, ns)
-}
+}*/
 
 /// Parse and resolve the Solidity source code provided in src, for the target chain as specified in target.
 /// The result is a list of resolved contracts (if successful) and a list of compiler warnings, errors and

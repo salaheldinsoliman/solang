@@ -10,7 +10,7 @@ use crate::codegen::expression::expression;
 use crate::codegen::vartable::Vartable;
 use crate::codegen::{Builtin, Expression, Options};
 use crate::sema::ast::{self, Function, Namespace, RetrieveType, StringLocation, Type};
-use ink_env::hash::{Blake2x256, CryptoHash};
+//use ink_env::hash::{Blake2x256, CryptoHash};
 use parity_scale_codec::Encode;
 use solang_parser::pt;
 
@@ -29,7 +29,7 @@ fn topic_hash(encoded: &[u8]) -> Vec<u8> {
     if encoded.len() <= 32 {
         buf[..encoded.len()].copy_from_slice(encoded);
     } else {
-        <Blake2x256 as CryptoHash>::hash(encoded, &mut buf);
+       // <Blake2x256 as CryptoHash>::hash(encoded, &mut buf);
     };
     buf.into()
 }

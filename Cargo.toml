@@ -28,7 +28,6 @@ tiny-keccak = { version = "2.0", features = ["keccak"] }
 serde_json = "1.0"
 serde = "1.0"
 serde_derive = { version = "1.0" }
-inkwell = { version = "0.2.0", features = ["target-webassembly", "no-libffi-linking", "llvm15-0"], optional = true }
 blake2-rfc = "0.2.18"
 handlebars = "4.3"
 contract-metadata = "3.0"
@@ -36,7 +35,12 @@ semver = { version = "1.0", features = ["serde"] }
 tempfile = "3.4"
 libc = { version = "0.2", optional = true }
 tower-lsp = "0.20"
-tokio = { version = "1.27", features = ["rt", "io-std", "macros"] }
+tokio = { version = "1.32", features = ["sync","macros","rt","time", "io-util", "io-std"] }
+wasm-bindgen = "0.2.87"
+async-std = "1.12.0"
+futures-io = "0.3.28"
+tokio-util = "0.4.0"
+prokio = "0.1.0"
 base58 = "0.2.0"
 sha2 = "0.10"
 ripemd = "0.1"
@@ -54,7 +58,6 @@ anchor-syn = { version = "0.28.0", features = ["idl"] }
 convert_case = "0.6"
 parse-display = "0.8.0"
 parity-scale-codec = "3.4"
-ink_env = "4.2.0"
 ink_metadata = "4.2.0"
 scale-info = "2.4"
 petgraph = "0.6.3"
@@ -65,6 +68,7 @@ wasm-opt = { version = "0.112.0", optional = true }
 contract-build = { version = "3.0.1", optional = true }
 primitive-types = { version = "0.12", features = ["codec"] }
 normalize-path = "0.2.1"
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 num-derive = "0.4"
@@ -85,16 +89,12 @@ ink_primitives = "4.2.0"
 wasm_host_attr = { path = "tests/wasm_host_attr" }
 num-bigint = { version = "0.4", features = ["rand", "serde"]}
 
+
 [package.metadata.docs.rs]
 no-default-features = true
 
 [profile.release]
 lto = true
-
-[features]
-default = ["llvm", "wasm_opt"]
-llvm = ["inkwell", "libc"]
-wasm_opt = ["llvm", "wasm-opt", "contract-build"]
 
 [workspace]
 members = ["solang-parser", "tests/wasm_host_attr"]

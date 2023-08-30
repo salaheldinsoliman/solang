@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::{
-    builder::ValueParser, parser::ValueSource, value_parser, ArgAction, ArgMatches, Args, Id,
+    builder::ValueParser,  value_parser, ArgAction, Args, 
     Parser, Subcommand,
 };
 use clap_complete::Shell;
@@ -12,13 +12,9 @@ use semver::Version;
 use serde::Deserialize;
 use std::{ffi::OsString, path::PathBuf, process::exit};
 
-use solang::{
-    codegen::{OptimizationLevel, Options},
-    file_resolver::FileResolver,
-    Target,
-};
+use solang::
+    Target;
 
-mod test;
 #[derive(Parser)]
 #[command(author = env!("CARGO_PKG_AUTHORS"), version = concat!("version ", env!("SOLANG_VERSION")), about = env!("CARGO_PKG_DESCRIPTION"), subcommand_required = true)]
 pub struct Cli {
@@ -28,23 +24,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    #[command(about = "Compile Solidity source files")]
-    Compile(Compile),
-
-    #[command(about = "Generate documention for contracts using doc comments")]
-    Doc(Doc),
-
-    #[command(about = "Print shell completion for various shells to STDOUT")]
-    ShellComplete(ShellComplete),
 
     #[command(about = "Start LSP language server on stdin/stdout")]
     LanguageServer(LanguageServerCommand),
 
-    #[command(about = "Generate Solidity interface files from Anchor IDL files")]
-    Idl(IdlCommand),
 
-    #[command(about = "Create a new Solang project")]
-    New(New),
 }
 
 #[derive(Args)]
@@ -126,7 +110,7 @@ pub struct Compile {
     #[serde(default = "Optimizations::default")]
     pub optimizations: Optimizations,
 }
-
+/* 
 impl Compile {
     /// loop over args explicitly provided at runtime and update Compile accordingly.
     pub fn overwrite_with_matches(&mut self, matches: &ArgMatches) -> &mut Compile {
@@ -238,7 +222,7 @@ impl Compile {
         self
     }
 }
-
+*/
 #[derive(Args, Deserialize, Default, Debug, PartialEq)]
 pub struct CompilerOutput {
     #[arg(name = "EMIT", help = "Emit compiler state at early stage", long = "emit", num_args = 1, value_parser = ["ast-dot", "cfg", "llvm-ir", "llvm-bc", "object", "asm"])]
@@ -511,7 +495,7 @@ impl PackageTrait for DocPackage {
         &self.import_map
     }
 }
-
+/* 
 pub fn imports_arg<T: PackageTrait>(package: &T) -> FileResolver {
     let mut resolver = FileResolver::default();
 
@@ -574,7 +558,7 @@ pub fn options_arg(debug: &DebugFeatures, optimizations: &Optimizations) -> Opti
         }),
     }
 }
-
+*/
 // Parse the import map argument. This takes the form
 /// --import-map openzeppelin=/opt/openzeppelin-contracts/contract,
 /// and returns the name of the map and the path.
@@ -659,7 +643,7 @@ where
 fn default_true() -> bool {
     true
 }
-
+/* 
 /// Get args provided explicitly at runtime.
 fn explicit_args(matches: &ArgMatches) -> Vec<&Id> {
     matches
@@ -672,3 +656,4 @@ fn explicit_args(matches: &ArgMatches) -> Vec<&Id> {
         })
         .collect()
 }
+*/
