@@ -37,8 +37,9 @@ use tower_lsp::{
     },
     Client, LanguageServer, LspService, Server,
 };
-
 use crate::cli::{target_arg, LanguageServerCommand};
+use std::cfg;
+
 
 /// Represents the type of the code object that a reference points to
 /// Here "code object" refers to contracts, functions, structs, enums etc., that are defined and used within a namespace.
@@ -179,8 +180,7 @@ pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
         }
     }
 
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+    let (stdin , stdout) = tokio::io::duplex(120);
 
     let target = target_arg(&language_args.target);
 
@@ -207,6 +207,11 @@ pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
 
 impl SolangServer {
     /// Parse file
+    // cfg wasi
+
+
+    // use cfg wasi
+    
     async fn parse_file(&self, uri: Url) {
         let mut resolver = FileResolver::default();
         for (path, contents) in &self.files.lock().await.text_buffers {

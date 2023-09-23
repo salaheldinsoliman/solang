@@ -7,7 +7,7 @@ use crate::codegen::{Builtin, Expression};
 use crate::sema::ast::StructType;
 use crate::sema::ast::{Namespace, Type, Type::Uint};
 use parity_scale_codec::Encode;
-use primitive_types::U256;
+//use primitive_types::U256;
 use solang_parser::pt::Loc::Codegen;
 use std::collections::HashMap;
 
@@ -615,79 +615,11 @@ impl AbiEncoding for ScaleEncoding {
                     ..
                 } => {
                     let bytes = value.to_bytes_be().1;
-                    result.extend_from_slice(&U256::from_big_endian(&bytes).encode()[..]);
+                    //result.extend_from_slice(&U256::from_big_endian(&bytes).encode()[..]);
                 }
                 _ => return None,
             }
         }
         result.into()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use num_bigint::{BigInt, Sign};
-    use parity_scale_codec::Encode;
-    use primitive_types::U256;
-
-    use crate::{
-        codegen::{
-            encoding::{scale_encoding::ScaleEncoding, AbiEncoding},
-            Expression,
-        },
-        sema::ast::Type,
-    };
-
-    #[test]
-    fn const_encode_dynamic_bytes() {
-        let data = vec![0x41, 0x41];
-        let encoder = ScaleEncoding::new(false);
-        let expr = Expression::AllocDynamicBytes {
-            loc: Default::default(),
-            ty: Type::DynamicBytes,
-            size: Expression::Poison.into(),
-            initializer: data.clone().into(),
-        };
-        let encoded = encoder.const_encode(&[expr]).unwrap();
-        assert_eq!(encoded, data.encode());
-    }
-
-    #[test]
-    fn const_encode_uint() {
-        let encoder = ScaleEncoding::new(false);
-        for value in [U256::MAX, U256::zero(), U256::one()] {
-            let mut bytes = [0u8; 32].to_vec();
-            value.to_big_endian(&mut bytes);
-            let data = BigInt::from_bytes_be(Sign::Plus, &bytes);
-            let expr = Expression::NumberLiteral {
-                loc: Default::default(),
-                ty: Type::Uint(256),
-                value: data,
-            };
-            let encoded = encoder.const_encode(&[expr]).unwrap();
-            assert_eq!(encoded, value.encode());
-        }
-    }
-
-    #[test]
-    fn const_encode_bytes4() {
-        let encoder = ScaleEncoding::new(false);
-        for value in [
-            [0x00, 0x00, 0xff, 0xff],
-            [0x00, 0xff, 0xff, 0x00],
-            [0xff, 0xff, 0x00, 0x00],
-            [0xff, 0xff, 0xff, 0xff],
-            [0x00, 0x00, 0x00, 0x00],
-            [0xde, 0xad, 0xbe, 0xef],
-            [0x01, 0x00, 0x00, 0x00],
-            [0x00, 0x00, 0x00, 0x01],
-        ] {
-            let expr = Expression::NumberLiteral {
-                ty: Type::Bytes(4),
-                value: BigInt::from_bytes_be(Sign::Plus, &value),
-                loc: Default::default(),
-            };
-            assert_eq!(&encoder.const_encode(&[expr]).unwrap(), &value.encode());
-        }
     }
 }

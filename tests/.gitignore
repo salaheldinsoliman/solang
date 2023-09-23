@@ -1,5 +1,0 @@
-*.wasm
-c.json
-rel.json
-*.so
-*.contract
