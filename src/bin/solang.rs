@@ -16,7 +16,7 @@ fn main() {
 
     match cli.command {
         
-        Commands::LanguageServer(server_args) => languageserver::start_server(&server_args),
+        Commands::LanguageServer(server_args) => languageserver::start_server(),
 
         _ => {}
         

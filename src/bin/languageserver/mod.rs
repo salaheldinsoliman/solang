@@ -187,12 +187,16 @@ pub struct SolangServer {
     global_cache: Mutex<GlobalCache>,
 }
 
+// we need to tell wasm-bindgen that this function will be imported
+// from the javascript code
+
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_server(language_args: &LanguageServerCommand)  {
+#[wasm_bindgen]
+pub async fn start_server(/*language_args: &LanguageServerCommand*/)  {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
 
-    if let Some(paths) = &language_args.import_path {
+    /*if let Some(paths) = &language_args.import_path {
         for path in paths {
             importpaths.push(path.clone());
         }
@@ -202,15 +206,15 @@ pub async fn start_server(language_args: &LanguageServerCommand)  {
         for (map, path) in maps {
             importmaps.push((map.clone(), path.clone()));
         }
-    }
+    }*/
 
     let (stdin , stdout) = tokio::io::duplex(120);
 
-    let target = target_arg(&language_args.target);
+   
 
     let (service, socket) = LspService::new(|client| SolangServer {
         client,
-        target,
+        target: Target::Solana,
         importpaths,
         importmaps,
         files: Mutex::new(Files {
