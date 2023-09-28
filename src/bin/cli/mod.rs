@@ -19,7 +19,7 @@ use solang::{
 use std::{ffi::OsString, path::PathBuf, process::exit};
 
 #[derive(Parser)]
-#[command(author = env!("CARGO_PKG_AUTHORS"), version = concat!("version ", env!("SOLANG_VERSION")), about = env!("CARGO_PKG_DESCRIPTION"), subcommand_required = true)]
+#[command(author = env!("CARGO_PKG_AUTHORS"), about = env!("CARGO_PKG_DESCRIPTION"), subcommand_required = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

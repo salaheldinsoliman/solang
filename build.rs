@@ -2,7 +2,7 @@
 
 use std::process::Command;
 
-fn main() {
+fn main() {/* 
     #[cfg(feature = "llvm")]
     {
         Command::new("make")
@@ -63,5 +63,5 @@ fn main() {
     // Make sure we have an 8MiB stack on Windows. Windows defaults to a 1MB
     // stack, which is not big enough for debug builds
     #[cfg(windows)]
-    println!("cargo:rustc-link-arg=/STACK:8388608");
+    println!("cargo:rustc-link-arg=/STACK:8388608");*/
 }

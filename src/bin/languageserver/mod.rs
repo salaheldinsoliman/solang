@@ -16,6 +16,7 @@ use solang::{
 use solang_parser::pt;
 use std::{collections::HashMap, ffi::OsString, path::PathBuf};
 use tokio::sync::Mutex;
+
 use tower_lsp::{
     jsonrpc::{Error, ErrorCode, Result},
     lsp_types::{
@@ -39,6 +40,29 @@ use tower_lsp::{
 };
 use crate::cli::{target_arg, LanguageServerCommand};
 use std::cfg;
+
+
+// this program is to be compiled to wasm
+// so we need to use the wasm32 target
+// and we need to use the wasm-bindgen crate
+// to provide the necessary bindings
+// to the browser
+//
+// we also need to import the solang crate
+// so we can use the solang compiler
+// and the solang crate needs to be compiled
+// to wasm as well
+//
+// we also need to import the web_sys crate
+// so we can use the browser's console.log
+// function
+//
+// we also need to import the js_sys crate
+// so we can use the browser's alert function
+//
+
+use wasm_bindgen::prelude::*;
+
 
 
 /// Represents the type of the code object that a reference points to
@@ -164,7 +188,7 @@ pub struct SolangServer {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
+pub async fn start_server(language_args: &LanguageServerCommand)  {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
 
@@ -1792,7 +1816,7 @@ impl LanguageServer for SolangServer {
                 MessageType::INFO,
                 format!(
                     "solang language server {} initialized",
-                    env!("SOLANG_VERSION")
+                    "sesa"
                 ),
             )
             .await;
