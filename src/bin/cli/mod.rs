@@ -5,22 +5,18 @@ use clap::{
     Parser, Subcommand,
 };
 use clap_complete::Shell;
-#[cfg(feature = "wasm_opt")]
-use contract_build::OptimizationPasses;
 
 use itertools::Itertools;
 use semver::Version;
 use serde::Deserialize;
 use solang::{
-    codegen::{OptimizationLevel, Options},
     file_resolver::FileResolver,
     Target,
 };
 use std::{ffi::OsString, path::PathBuf, process::exit};
 
-mod test;
 #[derive(Parser)]
-#[command(author = env!("CARGO_PKG_AUTHORS"), version = concat!("version ", env!("SOLANG_VERSION")), about = env!("CARGO_PKG_DESCRIPTION"), subcommand_required = true)]
+#[command(author = env!("CARGO_PKG_AUTHORS"), version = concat!("version ", "solang version"), about = env!("CARGO_PKG_DESCRIPTION"), subcommand_required = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -28,24 +24,9 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    #[command(about = "Compile Solidity source files")]
-    Compile(Compile),
 
-    #[command(about = "Generate documention for contracts using doc comments")]
-    Doc(Doc),
-
-    #[command(about = "Print shell completion for various shells to STDOUT")]
-    ShellComplete(ShellComplete),
-
-    #[cfg(feature = "language_server")]
     #[command(about = "Start LSP language server on stdin/stdout")]
     LanguageServer(LanguageServerCommand),
-
-    #[command(about = "Generate Solidity interface files from Anchor IDL files")]
-    Idl(IdlCommand),
-
-    #[command(about = "Create a new Solang project")]
-    New(New),
 }
 
 #[derive(Args)]
@@ -97,147 +78,6 @@ pub struct Doc {
 
     #[arg(name = "OUTPUT",help = "output directory", short = 'o', long = "output", num_args = 1, value_parser =ValueParser::string())]
     pub output_directory: Option<OsString>,
-}
-
-#[derive(Args, Deserialize, Debug, PartialEq)]
-pub struct Compile {
-    #[arg(name = "CONFFILE", help = "Take arguments from configuration file", long = "config-file", value_parser = ValueParser::os_string(), num_args = 0..=1, default_value = "solang.toml")]
-    #[serde(skip)]
-    pub configuration_file: Option<OsString>,
-
-    #[clap(flatten)]
-    pub package: CompilePackage,
-
-    #[clap(flatten)]
-    #[serde(
-        default = "CompilerOutput::default",
-        rename(deserialize = "compiler-output")
-    )]
-    pub compiler_output: CompilerOutput,
-
-    #[clap(flatten)]
-    #[serde(rename(deserialize = "target"))]
-    pub target_arg: CompileTargetArg,
-
-    #[clap(flatten)]
-    #[serde(default = "DebugFeatures::default")]
-    pub debug_features: DebugFeatures,
-
-    #[clap(flatten)]
-    #[serde(default = "Optimizations::default")]
-    pub optimizations: Optimizations,
-}
-
-impl Compile {
-    /// loop over args explicitly provided at runtime and update Compile accordingly.
-    pub fn overwrite_with_matches(&mut self, matches: &ArgMatches) -> &mut Compile {
-        for id in explicit_args(matches) {
-            match id.as_str() {
-                // Package args
-                "INPUT" => {
-                    self.package.input = matches
-                        .get_many::<PathBuf>("INPUT")
-                        .map(|input_paths| input_paths.map(PathBuf::from).collect())
-                }
-                "CONTRACT" => {
-                    self.package.contracts = matches
-                        .get_many::<String>("CONTRACT")
-                        .map(|contract_names| contract_names.map(String::from).collect())
-                }
-                "IMPORTPATH" => {
-                    self.package.import_path = matches
-                        .get_many::<PathBuf>("IMPORTPATH")
-                        .map(|paths| paths.map(PathBuf::from).collect())
-                }
-                "IMPORTMAP" => {
-                    self.package.import_map = matches
-                        .get_many::<(String, PathBuf)>("IMPORTMAP")
-                        .map(|import_map| import_map.cloned().collect())
-                }
-                "AUTHOR" => {
-                    self.package.authors = matches
-                        .get_many::<String>("AUTHOR")
-                        .map(|contract_names| contract_names.map(String::from).collect())
-                }
-                "VERSION" => self.package.version = matches.get_one::<String>("VERSION").cloned(),
-
-                // CompilerOutput args
-                "EMIT" => self.compiler_output.emit = matches.get_one::<String>("EMIT").cloned(),
-                "OUTPUT" => {
-                    self.compiler_output.output_directory =
-                        matches.get_one::<String>("OUTPUT").cloned()
-                }
-                "OUTPUTMETA" => {
-                    self.compiler_output.output_meta =
-                        matches.get_one::<String>("OUTPUTMETA").cloned()
-                }
-                "STD-JSON" => {
-                    self.compiler_output.std_json_output =
-                        *matches.get_one::<bool>("STD-JSON").unwrap()
-                }
-                "VERBOSE" => {
-                    self.compiler_output.verbose = *matches.get_one::<bool>("VERBOSE").unwrap()
-                }
-
-                // DebugFeatures args
-                "NOLOGAPIRETURNS" => {
-                    self.debug_features.log_api_return_codes =
-                        *matches.get_one::<bool>("NOLOGAPIRETURNS").unwrap()
-                }
-                "NOLOGRUNTIMEERRORS" => {
-                    self.debug_features.log_runtime_errors =
-                        *matches.get_one::<bool>("NOLOGRUNTIMEERRORS").unwrap()
-                }
-                "NOPRINTS" => {
-                    self.debug_features.log_prints = *matches.get_one::<bool>("NOPRINTS").unwrap()
-                }
-                "GENERATEDEBUGINFORMATION" => {
-                    self.debug_features.generate_debug_info =
-                        *matches.get_one::<bool>("GENERATEDEBUGINFORMATION").unwrap()
-                }
-                "RELEASE" => {
-                    self.debug_features.release = *matches.get_one::<bool>("RELEASE").unwrap()
-                }
-
-                // Optimizations args
-                "DEADSTORAGE" => {
-                    self.optimizations.dead_storage =
-                        *matches.get_one::<bool>("DEADSTORAGE").unwrap()
-                }
-                "CONSTANTFOLDING" => {
-                    self.optimizations.constant_folding =
-                        *matches.get_one::<bool>("CONSTANTFOLDING").unwrap()
-                }
-                "STRENGTHREDUCE" => {
-                    self.optimizations.strength_reduce =
-                        *matches.get_one::<bool>("STRENGTHREDUCE").unwrap()
-                }
-                "VECTORTOSLICE" => {
-                    self.optimizations.vector_to_slice =
-                        *matches.get_one::<bool>("VECTORTOSLICE").unwrap()
-                }
-                "COMMONSUBEXPRESSIONELIMINATION" => {
-                    self.optimizations.common_subexpression_elimination = *matches
-                        .get_one::<bool>("COMMONSUBEXPRESSIONELIMINATION")
-                        .unwrap()
-                }
-                "OPT" => self.optimizations.opt_level = matches.get_one::<String>("OPT").cloned(),
-
-                "TARGET" => self.target_arg.name = matches.get_one::<String>("TARGET").cloned(),
-                "ADDRESS_LENGTH" => {
-                    self.target_arg.address_length =
-                        matches.get_one::<u64>("ADDRESS_LENGTH").copied()
-                }
-                "VALUE_LENGTH" => {
-                    self.target_arg.value_length = matches.get_one::<u64>("VALUE_LENGTH").copied()
-                }
-
-                _ => {}
-            }
-        }
-
-        self
-    }
 }
 
 #[derive(Args, Deserialize, Default, Debug, PartialEq)]
@@ -362,45 +202,8 @@ impl Default for DebugFeatures {
     }
 }
 
-#[derive(Args, Deserialize, Default, Debug, PartialEq)]
-pub struct Optimizations {
-    #[arg(name = "DEADSTORAGE", help = "Disable dead storage codegen optimization", long = "no-dead-storage", action = ArgAction::SetFalse, display_order = 3)]
-    #[serde(default = "default_true", rename(deserialize = "dead-storage"))]
-    pub dead_storage: bool,
 
-    #[arg(name = "CONSTANTFOLDING", help = "Disable constant folding codegen optimization", long = "no-constant-folding", action = ArgAction::SetFalse, display_order = 1)]
-    #[serde(default = "default_true", rename(deserialize = "constant-folding"))]
-    pub constant_folding: bool,
-
-    #[arg(name = "STRENGTHREDUCE", help = "Disable strength reduce codegen optimization", long = "no-strength-reduce", action = ArgAction::SetFalse, display_order = 2)]
-    #[serde(default = "default_true", rename(deserialize = "strength-reduce"))]
-    pub strength_reduce: bool,
-
-    #[arg(name = "VECTORTOSLICE", help = "Disable vector to slice codegen optimization", long = "no-vector-to-slice", action = ArgAction::SetFalse, display_order = 4)]
-    #[serde(default = "default_true", rename(deserialize = "vector-to-slice"))]
-    pub vector_to_slice: bool,
-
-    #[arg(name = "COMMONSUBEXPRESSIONELIMINATION", help = "Disable common subexpression elimination", long = "no-cse", action = ArgAction::SetFalse, display_order = 5)]
-    #[serde(
-        default = "default_true",
-        rename(deserialize = "common-subexpression-elimination")
-    )]
-    pub common_subexpression_elimination: bool,
-
-    #[arg(name = "OPT", help = "Set llvm optimizer level ", short = 'O', default_value = "default", value_parser = ["none", "less", "default", "aggressive"], num_args = 1)]
-    #[serde(rename(deserialize = "llvm-IR-optimization-level"))]
-    pub opt_level: Option<String>,
-
-    #[cfg(feature = "wasm_opt")]
-    #[arg(
-        name = "WASM_OPT",
-        help = "wasm-opt passes for Wasm targets (0, 1, 2, 3, 4, s or z; see the wasm-opt help for more details)",
-        long = "wasm-opt",
-        num_args = 1
-    )]
-    #[serde(rename(deserialize = "wasm-opt"))]
-    pub wasm_opt_passes: Option<OptimizationPasses>,
-}
+ 
 
 pub trait TargetArgTrait {
     fn get_name(&self) -> &String;
@@ -553,38 +356,8 @@ pub fn imports_arg<T: PackageTrait>(package: &T) -> FileResolver {
     resolver
 }
 
-pub fn options_arg(debug: &DebugFeatures, optimizations: &Optimizations) -> Options {
-    let opt_level = if let Some(level) = &optimizations.opt_level {
-        match level.as_str() {
-            "none" => OptimizationLevel::None,
-            "less" => OptimizationLevel::Less,
-            "default" => OptimizationLevel::Default,
-            "aggressive" => OptimizationLevel::Aggressive,
-            _ => unreachable!(),
-        }
-    } else {
-        OptimizationLevel::Default
-    };
 
-    Options {
-        dead_storage: optimizations.dead_storage,
-        constant_folding: optimizations.constant_folding,
-        strength_reduce: optimizations.strength_reduce,
-        vector_to_slice: optimizations.vector_to_slice,
-        common_subexpression_elimination: optimizations.common_subexpression_elimination,
-        generate_debug_information: debug.generate_debug_info,
-        opt_level,
-        log_api_return_codes: debug.log_api_return_codes && !debug.release,
-        log_runtime_errors: debug.log_runtime_errors && !debug.release,
-        log_prints: debug.log_prints && !debug.release,
-        #[cfg(feature = "wasm_opt")]
-        wasm_opt: optimizations.wasm_opt_passes.or(if debug.release {
-            Some(OptimizationPasses::Z)
-        } else {
-            None
-        }),
-    }
-}
+
 
 // Parse the import map argument. This takes the form
 /// --import-map openzeppelin=/opt/openzeppelin-contracts/contract,

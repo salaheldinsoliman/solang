@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use forge_fmt::{format, parse, FormatterConfig};
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use rust_lapper::{Interval, Lapper};
@@ -202,6 +201,8 @@ pub struct SolangServer {
 pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
+    /*let mut importpaths = Vec::new();
+    let mut importmaps = Vec::new();
 
     if let Some(paths) = &language_args.import_path {
         for path in paths {
@@ -214,24 +215,32 @@ pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
             importmaps.push((map.clone(), path.clone()));
         }
     }
+*/
+let (stdin , stdout) = tokio::io::duplex(120);
 
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+   
 
-    let target = target_arg(&language_args.target);
+let (service, socket) = LspService::new(|client| SolangServer {
+    client,
+    target: Target::Solana,
+    importpaths,
+    importmaps,
+    files: Mutex::new(Files {
+        caches: HashMap::new(),
+        text_buffers: HashMap::new(),
+    }),
+    global_cache: Mutex::new(GlobalCache {
+        definitions: HashMap::new(),
+        types: HashMap::new(),
+        implementations: HashMap::new(),
+        declarations: HashMap::new(),
+        properties: HashMap::new(),
+    }),
+});
 
-    let (service, socket) = LspService::new(|client| SolangServer {
-        client,
-        target,
-        importpaths,
-        importmaps,
-        files: Mutex::new(Default::default()),
-        global_cache: Mutex::new(Default::default()),
-    });
+Server::new(stdin, stdout, socket).serve(service).await;
 
-    Server::new(stdin, stdout, socket).serve(service).await;
-
-    std::process::exit(1);
+std::process::exit(1);
 }
 
 impl SolangServer {
@@ -2117,7 +2126,7 @@ impl LanguageServer for SolangServer {
                 MessageType::INFO,
                 format!(
                     "solang language server {} initialized",
-                    env!("SOLANG_VERSION")
+                    "solang"
                 ),
             )
             .await;
@@ -2723,22 +2732,8 @@ impl LanguageServer for SolangServer {
         Ok(Some(WorkspaceEdit::new(ws)))
     }
 
-    /// Called when "Format Document" is called by the user on the client side.
-    ///
-    /// Expected to return the formatted version of source code present in the file on which this method was triggered.
-    ///
-    /// ### Arguments
-    /// * `DocumentFormattingParams`
-    ///     * provides the name of the file whose code is to be formatted.
-    ///     * provides options that help configure how the file is formatted.
-    ///
-    /// ### Edge cases
-    /// * Returns `Err` when
-    ///     * an invalid file path is received.
-    ///     * reading the file fails.
-    ///     * parsing the file fails.
-    ///     * formatting the file fails.
-    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+     
+    /*async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         // get parse tree for the input file
         let uri = params.text_document.uri;
         let source_path = uri.to_file_path().map_err(|_| Error {
@@ -2792,7 +2787,7 @@ impl LanguageServer for SolangServer {
         };
 
         Ok(Some(vec![text_edit]))
-    }
+    }*/
 }
 
 /// Calculate the line and column from the Loc offset received from the parser

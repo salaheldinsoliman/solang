@@ -2,11 +2,7 @@
 
 pub mod abi;
 pub mod codegen;
-#[cfg(feature = "llvm")]
-pub mod emit;
 pub mod file_resolver;
-#[cfg(feature = "llvm")]
-mod linker;
 pub mod standard_json;
 
 // In Sema, we use result unit for returning early
@@ -115,45 +111,7 @@ impl Target {
 /// compiler warnings, errors and informational messages are also provided.
 ///
 /// The ctx is the inkwell llvm context.
-#[cfg(feature = "llvm")]
-pub fn compile(
-    filename: &OsStr,
-    resolver: &mut FileResolver,
-    target: Target,
-    opts: &codegen::Options,
-    authors: Vec<String>,
-    version: &str,
-) -> (Vec<(Vec<u8>, String)>, sema::ast::Namespace) {
-    let mut ns = parse_and_resolve(filename, resolver, target);
 
-    if ns.diagnostics.any_errors() {
-        return (Vec::new(), ns);
-    }
-
-    // codegen all the contracts
-    codegen::codegen(&mut ns, opts);
-
-    if ns.diagnostics.any_errors() {
-        return (Vec::new(), ns);
-    }
-
-    // emit the contracts
-    let mut results = Vec::new();
-
-    for contract_no in 0..ns.contracts.len() {
-        let contract = &ns.contracts[contract_no];
-
-        if contract.instantiable {
-            let code = contract.emit(&ns, opts);
-
-            let (abistr, _) = abi::generate_abi(contract_no, &ns, &code, false, &authors, version);
-
-            results.push((code, abistr));
-        };
-    }
-
-    (results, ns)
-}
 
 /// Parse and resolve the Solidity source code provided in src, for the target chain as specified in target.
 /// The result is a list of resolved contracts (if successful) and a list of compiler warnings, errors and

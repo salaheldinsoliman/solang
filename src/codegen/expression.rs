@@ -49,6 +49,7 @@ pub fn expression(
     let expr = evaluated.0.as_ref().unwrap_or(expr);
 
     match &expr {
+        ast::Expression::CodeLiteral { loc, contract_no, runtime } => todo!("code literal"),
         ast::Expression::StorageVariable {
             loc,
             contract_no: var_contract_no,
@@ -1061,9 +1062,7 @@ pub fn expression(
             ty: ty.clone(),
             value: value.clone(),
         },
-        ast::Expression::CodeLiteral {
-            loc, contract_no, ..
-        } => code(loc, *contract_no, ns, opt),
+        
         ast::Expression::NumberLiteral { loc, ty, value } => Expression::NumberLiteral {
             loc: *loc,
             ty: ty.clone(),
@@ -3646,44 +3645,6 @@ fn array_literal_to_memory_array(
     }
 }
 
-/// Generate the binary code for a contract
-#[cfg(feature = "llvm")]
-fn code(loc: &Loc, contract_no: usize, ns: &Namespace, opt: &Options) -> Expression {
-    let contract = &ns.contracts[contract_no];
-
-    let code = contract.emit(ns, opt);
-
-    let size = Expression::NumberLiteral {
-        loc: *loc,
-        ty: Type::Uint(32),
-        value: code.len().into(),
-    };
-
-    Expression::AllocDynamicBytes {
-        loc: *loc,
-        ty: Type::DynamicBytes,
-        size: size.into(),
-        initializer: Some(code),
-    }
-}
-
-#[cfg(not(feature = "llvm"))]
-fn code(loc: &Loc, _contract_no: usize, _ns: &Namespace, _opt: &Options) -> Expression {
-    let code = b"code placeholder".to_vec();
-
-    let size = Expression::NumberLiteral {
-        loc: *loc,
-        ty: Type::Uint(32),
-        value: code.len().into(),
-    };
-
-    Expression::AllocDynamicBytes {
-        loc: *loc,
-        ty: Type::DynamicBytes,
-        size: size.into(),
-        initializer: Some(code),
-    }
-}
 
 fn add_prefix_and_delimiter_to_print(mut expr: Expression) -> Expression {
     let prefix = b"print: ";

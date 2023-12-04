@@ -10,7 +10,6 @@ use crate::codegen::expression::expression;
 use crate::codegen::vartable::Vartable;
 use crate::codegen::{Builtin, Expression, Options};
 use crate::sema::ast::{self, Function, Namespace, RetrieveType, Type};
-use ink_env::hash::{Blake2x256, CryptoHash};
 use parity_scale_codec::Encode;
 use solang_parser::pt;
 
@@ -39,7 +38,8 @@ impl EventEmitter for PolkadotEventEmitter<'_> {
         if encoded.len() <= 32 {
             buf[..encoded.len()].copy_from_slice(encoded.as_bytes());
         } else {
-            <Blake2x256 as CryptoHash>::hash(encoded.as_bytes(), &mut buf);
+            //<Blake2x256 as CryptoHash>::hash(encoded.as_bytes(), &mut buf);
+            
         };
         buf.into()
     }

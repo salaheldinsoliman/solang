@@ -1,36 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use clap::{Command, CommandFactory, FromArgMatches};
-
-use clap_complete::generate;
-use cli::PackageTrait;
-use itertools::Itertools;
-use solang::{
-    abi,
-    codegen::{codegen, Options},
-    emit::Generate,
-    file_resolver::FileResolver,
-    sema::{ast::Namespace, file::PathDisplay},
-    standard_json::{EwasmContract, JsonContract, JsonResult},
-};
-use std::{
-    collections::{HashMap, HashSet},
-    ffi::OsString,
-    fs::{self, create_dir, create_dir_all, File},
-    io::prelude::*,
-    path::{Path, PathBuf},
-    process::exit,
-};
+use clap::{CommandFactory, FromArgMatches};
 
 use crate::cli::{
-    imports_arg, options_arg, target_arg, Cli, Commands, Compile, CompilerOutput, Doc, New,
-    ShellComplete,
+    Cli, Commands,
 };
 
 mod cli;
 mod doc;
 mod idl;
-#[cfg(feature = "language_server")]
 mod languageserver;
 
 fn main() {
@@ -39,33 +17,12 @@ fn main() {
     let cli = Cli::from_arg_matches(&matches).unwrap();
 
     match cli.command {
-        Commands::Doc(doc_args) => doc(doc_args),
-        Commands::Compile(compile_args) => {
-            // Read config from configuration file. If extra args exist, only overwrite the fields that the user explicitly provides.
-            let config = if let Some(conf_file) = &compile_args.configuration_file {
-                if PathBuf::from(conf_file).exists() {
-                    eprintln!("info: reading default config from toml file");
-                    let debug = matches.subcommand_matches("compile").unwrap();
-                    let mut compile = read_toml_config(conf_file);
-                    compile.overwrite_with_matches(debug);
-
-                    compile
-                } else {
-                    compile_args
-                }
-            } else {
-                compile_args
-            };
-            compile(&config)
-        }
-        Commands::ShellComplete(shell_args) => shell_complete(Cli::command(), shell_args),
-        #[cfg(feature = "language_server")]
+        
         Commands::LanguageServer(server_args) => languageserver::start_server(&server_args),
-        Commands::Idl(idl_args) => idl::idl(&idl_args),
-        Commands::New(new_arg) => new_command(new_arg),
+  
     }
 }
-
+/* 
 fn read_toml_config(path: &OsString) -> Compile {
     let toml_data = fs::read_to_string(path).unwrap();
 
@@ -580,3 +537,4 @@ fn create_file(path: &Path) -> File {
         }
     }
 }
+*/
