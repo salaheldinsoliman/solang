@@ -49,7 +49,11 @@ pub fn expression(
     let expr = evaluated.0.as_ref().unwrap_or(expr);
 
     match &expr {
-        ast::Expression::CodeLiteral { loc, contract_no, runtime } => todo!("code literal"),
+        ast::Expression::CodeLiteral {
+            loc,
+            contract_no,
+            runtime,
+        } => todo!("code literal"),
         ast::Expression::StorageVariable {
             loc,
             contract_no: var_contract_no,
@@ -1062,7 +1066,7 @@ pub fn expression(
             ty: ty.clone(),
             value: value.clone(),
         },
-        
+
         ast::Expression::NumberLiteral { loc, ty, value } => Expression::NumberLiteral {
             loc: *loc,
             ty: ty.clone(),
@@ -3644,7 +3648,6 @@ fn array_literal_to_memory_array(
         var_no: memory_array,
     }
 }
-
 
 fn add_prefix_and_delimiter_to_print(mut expr: Expression) -> Expression {
     let prefix = b"print: ";

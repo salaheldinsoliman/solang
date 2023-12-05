@@ -39,7 +39,6 @@ impl EventEmitter for PolkadotEventEmitter<'_> {
             buf[..encoded.len()].copy_from_slice(encoded.as_bytes());
         } else {
             //<Blake2x256 as CryptoHash>::hash(encoded.as_bytes(), &mut buf);
-            
         };
         buf.into()
     }

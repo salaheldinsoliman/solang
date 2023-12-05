@@ -4,6 +4,8 @@ pub mod abi;
 pub mod codegen;
 pub mod file_resolver;
 pub mod standard_json;
+pub mod languageserver;
+
 
 // In Sema, we use result unit for returning early
 // when code-misparses. The error will be added to the namespace diagnostics, no need to have anything but unit
@@ -14,6 +16,7 @@ use file_resolver::FileResolver;
 use sema::diagnostics;
 use solang_parser::pt;
 use std::{ffi::OsStr, fmt};
+use wasm_bindgen::prelude::*;
 
 /// The target chain you want to compile Solidity for.
 #[derive(Debug, Clone, Copy)]
@@ -112,7 +115,6 @@ impl Target {
 ///
 /// The ctx is the inkwell llvm context.
 
-
 /// Parse and resolve the Solidity source code provided in src, for the target chain as specified in target.
 /// The result is a list of resolved contracts (if successful) and a list of compiler warnings, errors and
 /// informational messages like `found contact N`.
@@ -143,4 +145,15 @@ pub fn parse_and_resolve(
     ns.diagnostics.sort_and_dedup();
 
     ns
+}
+
+
+#[wasm_bindgen]
+pub fn trial() {
+    println!("trial");
+}
+
+#[wasm_bindgen]
+pub fn start_server() {
+    languageserver::start_server();
 }

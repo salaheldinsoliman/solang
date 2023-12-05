@@ -4,19 +4,18 @@ use itertools::Itertools;
 use num_traits::ToPrimitive;
 use rust_lapper::{Interval, Lapper};
 use serde_json::Value;
-use solang::{
-    codegen::{self, codegen, Expression},
-    file_resolver::FileResolver,
-    parse_and_resolve,
-    sema::{
-        ast::{self, RetrieveType, StructType, Type},
-        builtin::{get_prototype, BUILTIN_FUNCTIONS, BUILTIN_METHODS, BUILTIN_VARIABLE},
-        builtin_structs::BUILTIN_STRUCTS,
-        symtable,
-        tags::render,
-    },
-    Target,
+use crate::codegen::{self, codegen, Expression};
+use crate::file_resolver::FileResolver;
+use crate::parse_and_resolve;
+use crate::sema::{
+    ast::{self, RetrieveType, StructType, Type},
+    builtin::{get_prototype, BUILTIN_FUNCTIONS, BUILTIN_METHODS, BUILTIN_VARIABLE},
+    builtin_structs::BUILTIN_STRUCTS,
+    symtable,
+    tags::render,
 };
+use crate::Target;
+
 use solang_parser::pt;
 use std::{
     collections::{HashMap, HashSet},
@@ -48,7 +47,6 @@ use tower_lsp::{
     Client, LanguageServer, LspService, Server,
 };
 
-use crate::cli::{target_arg, LanguageServerCommand};
 
 /// Represents the type of the code object that a reference points to
 /// Here "code object" refers to contracts, functions, structs, enums etc., that are defined and used within a namespace.
@@ -198,7 +196,7 @@ pub struct SolangServer {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_server(language_args: &LanguageServerCommand) -> ! {
+pub async fn start_server() -> ! {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
     /*let mut importpaths = Vec::new();

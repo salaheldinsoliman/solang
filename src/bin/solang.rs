@@ -1,28 +1,14 @@
-// SPDX-License-Identifier: Apache-2.0
 
-use clap::{CommandFactory, FromArgMatches};
 
-use crate::cli::{
-    Cli, Commands,
-};
 
-mod cli;
-mod doc;
-mod idl;
-mod languageserver;
-
-fn main() {
-    let matches = Cli::command().get_matches();
-
-    let cli = Cli::from_arg_matches(&matches).unwrap();
-
-    match cli.command {
-        
-        Commands::LanguageServer(server_args) => languageserver::start_server(&server_args),
-  
-    }
+// to call main from js, use solang.main()
+// https://rustwasm.github.io/docs/wasm-bindgen/reference/arbitrary-data-with-serde.html
+pub fn main() {
+    
 }
-/* 
+
+
+/*
 fn read_toml_config(path: &OsString) -> Compile {
     let toml_data = fs::read_to_string(path).unwrap();
 

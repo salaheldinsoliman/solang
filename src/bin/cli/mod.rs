@@ -9,10 +9,7 @@ use clap_complete::Shell;
 use itertools::Itertools;
 use semver::Version;
 use serde::Deserialize;
-use solang::{
-    file_resolver::FileResolver,
-    Target,
-};
+use solang::{file_resolver::FileResolver, Target};
 use std::{ffi::OsString, path::PathBuf, process::exit};
 
 #[derive(Parser)]
@@ -24,7 +21,6 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-
     #[command(about = "Start LSP language server on stdin/stdout")]
     LanguageServer(LanguageServerCommand),
 }
@@ -202,9 +198,6 @@ impl Default for DebugFeatures {
     }
 }
 
-
- 
-
 pub trait TargetArgTrait {
     fn get_name(&self) -> &String;
     fn get_address_length(&self) -> &Option<u64>;
@@ -355,9 +348,6 @@ pub fn imports_arg<T: PackageTrait>(package: &T) -> FileResolver {
 
     resolver
 }
-
-
-
 
 // Parse the import map argument. This takes the form
 /// --import-map openzeppelin=/opt/openzeppelin-contracts/contract,
