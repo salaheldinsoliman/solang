@@ -1,5 +1,6 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
+// to run the vscode extension, press F5 or click the green arrow button in the debug panel
 import * as vscode from 'vscode';
 import * as rpc from 'vscode-jsonrpc';
 import { promises as fs } from 'fs';

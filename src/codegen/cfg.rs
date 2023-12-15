@@ -78,7 +78,7 @@ pub enum Instr {
         ty: Type,
         value: Expression,
         storage: Expression,
-    },
+    }, 
     /// In storage slot, set the value at the offset
     SetStorageBytes {
         value: Expression,
