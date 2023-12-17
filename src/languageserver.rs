@@ -121,8 +121,8 @@ type Properties = HashMap<DefinitionIndex, HashMap<String, Option<DefinitionInde
 /// Stores information used by language server for every opened file
 #[derive(Default)]
 struct Files {
-    caches: HashMap<PathBuf, FileCache>,
-    text_buffers: HashMap<PathBuf, String>,
+    caches: HashMap<String, FileCache>,
+    text_buffers: HashMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -242,13 +242,27 @@ std::process::exit(1);
 }
 
 impl SolangServer {
+
+    fn url_to_file_path(&self, uri: &Url) -> Result<PathBuf> {
+        let path = uri.to_string();
+        let pathbuf = PathBuf::from(path);
+        Ok(pathbuf)
+    }
+
+    fn url_from_file_path(&self, path: &std::path::Path) -> Result<Url> {
+        let pathbuf = path.to_str().unwrap();
+        let uri = Url::parse(pathbuf).unwrap();
+        Ok(uri)
+    }
+
+
     /// Parse file
     async fn parse_file(&self, uri: Url) {
         let mut resolver = FileResolver::default();
         for (path, contents) in &self.files.lock().await.text_buffers {
-            resolver.set_file_contents(path.to_str().unwrap(), contents.clone());
+            resolver.set_file_contents(path.as_str(), contents.clone());
         }
-        if let Ok(path) = uri.to_file_path() {
+        if let Ok(path) = self.url_to_file_path(&uri) {
             let dir = path.parent().unwrap();
 
             resolver.add_import_path(dir);
@@ -294,7 +308,7 @@ impl SolangServer {
                             .map(|note| DiagnosticRelatedInformation {
                                 message: note.message.to_string(),
                                 location: Location {
-                                    uri: Url::from_file_path(&ns.files[note.loc.file_no()].path)
+                                    uri: self.url_from_file_path(&ns.files[note.loc.file_no()].path)
                                         .unwrap(),
                                     range: loc_to_range(&note.loc, &ns.files[ns.top_file_no()]),
                                 },
@@ -321,7 +335,7 @@ impl SolangServer {
             let mut files = self.files.lock().await;
             for (f, c) in ns.files.iter().zip(file_caches.into_iter()) {
                 if f.cache_no.is_some() {
-                    files.caches.insert(f.path.clone(), c);
+                    files.caches.insert(f.path.as_os_str().to_str().unwrap().to_string(), c);
                 }
             }
 
@@ -338,11 +352,7 @@ impl SolangServer {
         params: GotoDefinitionParams,
     ) -> Result<Option<DefinitionIndex>> {
         let uri = params.text_document_position_params.text_document.uri;
-        let path = uri.to_file_path().map_err(|_| Error {
-            code: ErrorCode::InvalidRequest,
-            message: format!("Received invalid URI: {uri}").into(),
-            data: None,
-        })?;
+        let path = uri.to_string();
 
         let files = self.files.lock().await;
         if let Some(cache) = files.caches.get(&path) {
@@ -2071,6 +2081,8 @@ impl<'a> Builder<'a> {
     }
 }
 
+
+
 #[tower_lsp::async_trait]
 impl LanguageServer for SolangServer {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -2161,14 +2173,14 @@ impl LanguageServer for SolangServer {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
-
-        match uri.to_file_path() {
+        let uri_string = uri.to_string();
+        match self.url_to_file_path(&uri) {
             Ok(path) => {
                 self.files
                     .lock()
                     .await
                     .text_buffers
-                    .insert(path, params.text_document.text);
+                    .insert(uri_string, params.text_document.text);
                 self.parse_file(uri).await;
             }
             Err(_) => {
@@ -2181,10 +2193,10 @@ impl LanguageServer for SolangServer {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
-
-        match uri.to_file_path() {
+        let uri_string = uri.to_string();
+        match self.url_to_file_path(&uri) {
             Ok(path) => {
-                if let Some(text_buf) = self.files.lock().await.text_buffers.get_mut(&path) {
+                if let Some(text_buf) = self.files.lock().await.text_buffers.get_mut(&uri_string) {
                     *text_buf = params
                         .content_changes
                         .into_iter()
@@ -2203,9 +2215,10 @@ impl LanguageServer for SolangServer {
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let uri = params.text_document.uri;
 
+        let uri_string = uri.to_string();
         if let Some(text) = params.text {
-            if let Ok(path) = uri.to_file_path() {
-                if let Some(text_buf) = self.files.lock().await.text_buffers.get_mut(&path) {
+            if let Ok(path) = self.url_to_file_path(&uri) {
+                if let Some(text_buf) = self.files.lock().await.text_buffers.get_mut(&uri_string) {
                     *text_buf = text;
                 }
             }
@@ -2217,10 +2230,11 @@ impl LanguageServer for SolangServer {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
 
-        if let Ok(path) = uri.to_file_path() {
+        let uri_string = uri.to_string();
+        if let Ok(path) = self.url_to_file_path(&uri) {
             let mut files = self.files.lock().await;
-            files.caches.remove(&path);
-            files.text_buffers.remove(&path);
+            files.caches.remove(uri_string.as_str());
+            files.text_buffers.remove(uri_string.as_str());
         }
 
         self.client.publish_diagnostics(uri, vec![], None).await;
@@ -2235,11 +2249,7 @@ impl LanguageServer for SolangServer {
     ///     - Here, we return a list of variables, structs, enums, contracts, functions etc. accessible from the current scope.
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
-        let path = uri.to_file_path().map_err(|_| Error {
-            code: ErrorCode::InvalidRequest,
-            message: format!("Received invalid URI: {uri}").into(),
-            data: None,
-        })?;
+        let path = uri.to_string();
 
         let files = self.files.lock().await;
 
@@ -2401,10 +2411,10 @@ impl LanguageServer for SolangServer {
         let pos = hverparam.text_document_position_params.position;
 
         let uri = txtdoc.uri;
-
-        if let Ok(path) = uri.to_file_path() {
+        let uri_string = uri.to_string();
+        if let Ok(path) = self.url_to_file_path(&uri) {
             let files = &self.files.lock().await;
-            if let Some(cache) = files.caches.get(&path) {
+            if let Some(cache) = files.caches.get(&uri_string) {
                 if let Some(offset) = cache
                     .file
                     .get_offset(pos.line as usize, pos.character as usize)
@@ -2455,7 +2465,7 @@ impl LanguageServer for SolangServer {
         let location = definitions
             .get(&reference)
             .map(|range| {
-                let uri = Url::from_file_path(&reference.def_path).unwrap();
+                let uri = self.url_from_file_path(&reference.def_path).unwrap();
                 Location { uri, range: *range }
             })
             .map(GotoTypeDefinitionResponse::Scalar);
@@ -2512,7 +2522,7 @@ impl LanguageServer for SolangServer {
             .definitions
             .get(di)
             .map(|range| {
-                let uri = Url::from_file_path(&di.def_path).unwrap();
+                let uri = self.url_from_file_path(&di.def_path).unwrap();
                 Location { uri, range: *range }
             })
             .map(GotoTypeDefinitionResponse::Scalar);
@@ -2565,7 +2575,7 @@ impl LanguageServer for SolangServer {
                     .filter_map(|di| {
                         let path = &di.def_path;
                         gc.definitions.get(di).map(|range| {
-                            let uri = Url::from_file_path(path).unwrap();
+                            let uri = self.url_from_file_path(path).unwrap();
                             Location { uri, range: *range }
                         })
                     })
@@ -2609,7 +2619,7 @@ impl LanguageServer for SolangServer {
                     .filter_map(|di| {
                         let path = &di.def_path;
                         gc.definitions.get(di).map(|range| {
-                            let uri = Url::from_file_path(path).unwrap();
+                            let uri = self.url_from_file_path(path).unwrap();
                             Location { uri, range: *range }
                         })
                     })
@@ -2649,7 +2659,7 @@ impl LanguageServer for SolangServer {
         let mut locations: Vec<_> = caches
             .iter()
             .flat_map(|(p, cache)| {
-                let uri = Url::from_file_path(p).unwrap();
+                let uri = Url::parse(&p).unwrap();
                 cache
                     .references
                     .iter()
@@ -2664,7 +2674,7 @@ impl LanguageServer for SolangServer {
         // remove the definition location if `include_declaration` is `false`
         if !params.context.include_declaration {
             let definitions = &self.global_cache.lock().await.definitions;
-            let uri = Url::from_file_path(&reference.def_path).unwrap();
+            let uri = self.url_from_file_path(&reference.def_path).unwrap();
             if let Some(range) = definitions.get(&reference) {
                 let def = Location { uri, range: *range };
                 locations.retain(|loc| loc != &def);
@@ -2700,9 +2710,39 @@ impl LanguageServer for SolangServer {
             work_done_progress_params: params.work_done_progress_params,
             partial_result_params: Default::default(),
         };
-        let Some(reference) = self.get_reference_from_params(def_params).await? else {
+        /*let Some(reference) = self.get_reference_from_params(def_params).await? else {
+            return Ok(None);
+        };*/
+
+        // instead of calling self.get_reference_from_params, we can inline the code here
+        
+        
+        let uri = def_params.text_document_position_params.text_document.uri;
+        let path = uri.to_string();
+
+        let files = self.files.lock().await;
+
+        let mut references = Ok(None);
+        if let Some(cache) = files.caches.get(&path) {
+            let f = &cache.file;
+            if let Some(offset) = f.get_offset(
+                def_params.text_document_position_params.position.line as _,
+                def_params.text_document_position_params.position.character as _,
+            ) {
+                if let Some(reference) = cache
+                    .references
+                    .find(offset, offset + 1)
+                    .min_by(|a, b| (a.stop - a.start).cmp(&(b.stop - b.start)))
+                {
+                    references =  Ok(Some(reference.val.clone()));
+                }
+            }
+        }
+        let Some(reference) = references? else {
             return Ok(None);
         };
+            
+        
 
         // the new name of the code object
         let new_text = params.new_name;
@@ -2713,11 +2753,11 @@ impl LanguageServer for SolangServer {
         let ws = caches
             .iter()
             .map(|(p, cache)| {
-                let uri = Url::from_file_path(p).unwrap();
+                let uri = Url::parse("sesa").unwrap();
                 let text_edits: Vec<_> = cache
                     .references
                     .iter()
-                    .filter(|r| r.val == reference)
+                    .filter(|r| r.val == reference  )
                     .map(|r| TextEdit {
                         range: get_range_exclusive(r.start, r.stop, &cache.file),
                         new_text: new_text.clone(),

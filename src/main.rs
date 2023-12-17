@@ -2,8 +2,8 @@
 
 
 
-use solang::start_server;
+//use solang::start_server;
 
 pub fn main() {
-    start_server();
+    //start_server();
 }
