@@ -7,6 +7,7 @@ pub mod standard_json;
 pub mod languageserver;
 
 
+
 // In Sema, we use result unit for returning early
 // when code-misparses. The error will be added to the namespace diagnostics, no need to have anything but unit
 // as error.
@@ -17,6 +18,7 @@ use sema::diagnostics;
 use solang_parser::pt;
 use std::{ffi::OsStr, fmt};
 use wasm_bindgen::prelude::*;
+use web_sys::console;
 
 /// The target chain you want to compile Solidity for.
 #[derive(Debug, Clone, Copy)]
@@ -150,7 +152,8 @@ pub fn parse_and_resolve(
 
 #[wasm_bindgen]
 pub fn trial() {
-    println!("trial");
+    // write to consol.log in browser
+    console::log_1(&"Hello world!".into());
 }
 
 #[wasm_bindgen]

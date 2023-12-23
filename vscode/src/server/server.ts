@@ -1,5 +1,14 @@
-import { createConnection, InitializeResult, DefinitionRequest } from 'vscode-languageserver';
+import { createConnection, InitializeResult, DefinitionRequest, ProposedFeatures, InitializeParams, TextDocumentSyncKind } from 'vscode-languageserver';
 import * as rpc from 'vscode-jsonrpc';
+import * as solang from 'solang';
+import * as vscode from 'vscode';
+
+import * as fs from "fs";
+import * as path from "path";
+
+
+declare const WebAssembly: any;
+
 
 const connection = createConnection(
   new rpc.StreamMessageReader(process.stdin),
@@ -7,6 +16,9 @@ const connection = createConnection(
 );
 
 connection.onInitialize(() => {
+  //solang.trial();
+  vscode.window.showInformationMessage('Hello World from solang!');
+  console.log('initializing sesa kosomk');
   const result: InitializeResult = {
     capabilities: {},
   };
