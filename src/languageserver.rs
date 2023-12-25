@@ -17,6 +17,7 @@ use crate::sema::{
 use crate::Target;
 
 use solang_parser::pt;
+use std::vec;
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
@@ -42,10 +43,14 @@ use tower_lsp::{
         ServerCapabilities, SignatureHelpOptions, TextDocumentContentChangeEvent,
         TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
         TypeDefinitionProviderCapability, Url, WorkspaceEdit, WorkspaceFoldersServerCapabilities,
-        WorkspaceServerCapabilities,
+        WorkspaceServerCapabilities, 
     },
     Client, LanguageServer, LspService, Server,
 };
+use tokio::io::{AsyncWriteExt, AsyncReadExt, AsyncRead, AsyncWrite, BufWriter};
+
+use tokio::io::BufReader;
+
 
 
 /// Represents the type of the code object that a reference points to
@@ -195,6 +200,281 @@ pub struct SolangServer {
     global_cache: Mutex<GlobalCache>,
 }
 
+
+
+const REQUEST: &str = r#"{"jsonrpc":"2.0","method":"initialize","params": {
+    "processId": 8000,
+    "clientInfo": {
+        "name": "vscode",
+        "version": "1.85.1"
+    },
+    "rootPath": "d:\\solang_fork_final",
+    "rootUri": "file:///d%3A/solang_fork_final",
+    "capabilities": {
+        "workspace": {
+            "applyEdit": true,
+            "workspaceEdit": {
+                "documentChanges": true,
+                "resourceOperations": [
+                    "create",
+                    "rename",
+                    "delete"
+                ],
+                "failureHandling": "textOnlyTransactional"
+            },
+            "didChangeConfiguration": {
+                "dynamicRegistration": true
+            },
+            "didChangeWatchedFiles": {
+                "dynamicRegistration": true
+            },
+            "symbol": {
+                "dynamicRegistration": true,
+                "symbolKind": {
+                    "valueSet": [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26
+                    ]
+                }
+            },
+            "executeCommand": {
+                "dynamicRegistration": true
+            },
+            "configuration": true,
+            "workspaceFolders": true
+        },
+        "textDocument": {
+            "publishDiagnostics": {
+                "relatedInformation": true,
+                "versionSupport": false,
+                "tagSupport": {
+                    "valueSet": [
+                        1,
+                        2
+                    ]
+                }
+            },
+            "synchronization": {
+                "dynamicRegistration": true,
+                "willSave": true,
+                "willSaveWaitUntil": true,
+                "didSave": true
+            },
+            "completion": {
+                "dynamicRegistration": true,
+                "contextSupport": true,
+                "completionItem": {
+                    "snippetSupport": true,
+                    "commitCharactersSupport": true,
+                    "documentationFormat": [
+                        "markdown",
+                        "plaintext"
+                    ],
+                    "deprecatedSupport": true,
+                    "preselectSupport": true,
+                    "tagSupport": {
+                        "valueSet": [
+                            1
+                        ]
+                    }
+                },
+                "completionItemKind": {
+                    "valueSet": [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25
+                    ]
+                }
+            },
+            "hover": {
+                "dynamicRegistration": true,
+                "contentFormat": [
+                    "markdown",
+                    "plaintext"
+                ]
+            },
+            "signatureHelp": {
+                "dynamicRegistration": true,
+                "signatureInformation": {
+                    "documentationFormat": [
+                        "markdown",
+                        "plaintext"
+                    ],
+                    "parameterInformation": {
+                        "labelOffsetSupport": true
+                    }
+                },
+                "contextSupport": true
+            },
+            "definition": {
+                "dynamicRegistration": true,
+                "linkSupport": true
+            },
+            "references": {
+                "dynamicRegistration": true
+            },
+            "documentHighlight": {
+                "dynamicRegistration": true
+            },
+            "documentSymbol": {
+                "dynamicRegistration": true,
+                "symbolKind": {
+                    "valueSet": [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26
+                    ]
+                },
+                "hierarchicalDocumentSymbolSupport": true
+            },
+            "codeAction": {
+                "dynamicRegistration": true,
+                "isPreferredSupport": true,
+                "codeActionLiteralSupport": {
+                    "codeActionKind": {
+                        "valueSet": [
+                            "",
+                            "quickfix",
+                            "refactor",
+                            "refactor.extract",
+                            "refactor.inline",
+                            "refactor.rewrite",
+                            "source",
+                            "source.organizeImports"
+                        ]
+                    }
+                }
+            },
+            "codeLens": {
+                "dynamicRegistration": true
+            },
+            "formatting": {
+                "dynamicRegistration": true
+            },
+            "rangeFormatting": {
+                "dynamicRegistration": true
+            },
+            "onTypeFormatting": {
+                "dynamicRegistration": true
+            },
+            "rename": {
+                "dynamicRegistration": true,
+                "prepareSupport": true
+            },
+            "documentLink": {
+                "dynamicRegistration": true,
+                "tooltipSupport": true
+            },
+            "typeDefinition": {
+                "dynamicRegistration": true,
+                "linkSupport": true
+            },
+            "implementation": {
+                "dynamicRegistration": true,
+                "linkSupport": true
+            },
+            "colorProvider": {
+                "dynamicRegistration": true
+            },
+            "foldingRange": {
+                "dynamicRegistration": true,
+                "rangeLimit": 5000,
+                "lineFoldingOnly": true
+            },
+            "declaration": {
+                "dynamicRegistration": true,
+                "linkSupport": true
+            },
+            "selectionRange": {
+                "dynamicRegistration": true
+            }
+        },
+        "window": {
+            "workDoneProgress": true
+        }
+    },
+    "trace": "verbose",
+    "workspaceFolders": [
+        {
+            "uri": "file:///d%3A/solang_fork_final",
+            "name": "solang_fork_final"
+        }
+    ]
+},"id":1}"#;
+fn mock_request() -> Vec<u8> {
+
+    format!("Content-Length: {}\r\n\r\n{}", REQUEST.len(), REQUEST).into_bytes()}
+
+
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_server() -> ! {
     let mut importpaths = Vec::new();
@@ -214,9 +494,15 @@ pub async fn start_server() -> ! {
         }
     }
 */
-let (stdin , stdout) = tokio::io::duplex(120);
 
-   
+//let (mut stdin, mut stdout) = tokio::io::duplex(64 * 1024);
+
+let mock = mock_request();
+
+let stdin = BufReader::new(mock.as_slice());
+
+let mut stdout = BufWriter::new(Vec::new());
+
 
 let (service, socket) = LspService::new(|client| SolangServer {
     client,
@@ -236,7 +522,15 @@ let (service, socket) = LspService::new(|client| SolangServer {
     }),
 });
 
-Server::new(stdin, stdout, socket).serve(service).await;
+println!("Starting server");
+Server::new(stdin, &mut stdout, socket).serve(service).await;
+
+let out = stdout.get_ref();
+
+
+println!("out string: {:?}", String::from_utf8(out.to_vec()).unwrap()  );
+
+println!("Server exited");
 
 std::process::exit(1);
 }
@@ -2086,6 +2380,7 @@ impl<'a> Builder<'a> {
 #[tower_lsp::async_trait]
 impl LanguageServer for SolangServer {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+        println!("SOLANG INIT CALLED");
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {

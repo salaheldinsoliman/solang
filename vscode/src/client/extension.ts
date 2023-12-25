@@ -10,7 +10,11 @@ import getServer from '../utils/getServer';
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
+const outputChannel = vscode.window.createOutputChannel("My Extension Logs");
+
 export async function activate(context: vscode.ExtensionContext) {
+  console.log('heeeeeeeeeeeeeeeeeeeeeeere');
+  outputChannel.appendLine("SOLL HEEERE RJSDJExtension activated");
   await tryActivate(context).catch((err) => {
     void vscode.window.showErrorMessage(`Cannot activate solang: ${err.message}`);
     throw err;
@@ -62,18 +66,16 @@ async function bootstrapExtension(context: vscode.ExtensionContext, serverpath: 
   context.subscriptions.push(client);
 }
 
+
 async function bootstrapServer(context: vscode.ExtensionContext) {
   let path
-  if (process.env.NODE_ENV === 'test') {
-    path = 'solang'
-  } else {
-    path = await getServer(context);
-  }
 
+  path = "solang";
   if (!path) {
     throw new Error('Solang Language Server is not available.');
   }
 
+  outputChannel.appendLine("SOLANG: " + path);
   console.log('Using server binary at', path);
 
   return path;

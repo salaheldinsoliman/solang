@@ -18,10 +18,30 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onLanguage:solidity"
+		""
 	],
 	"main": "./out/client/extension.js",
 	"contributes": {
+		"debuggers": [
+			{
+				"type": "node",
+				"label": "Node.js",
+				"program": "./out/client/debugAdapter.js",
+				"runtime": "node",
+				"configurationAttributes": {
+					"launch": {
+						"required": ["program"],
+						"properties": {
+							"program": {
+								"type": "string",
+								"description": "Path to the program that should be debugged"
+							}
+						}
+					}
+				},
+				"languages": ["javascript"]
+			}
+		],
 		"configuration": {
 			"type": "object",
 			"title:": "Solang Solidity Compiler",
