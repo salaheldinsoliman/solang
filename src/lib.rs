@@ -156,6 +156,16 @@ pub fn trial() {
     console::log_1(&"Hello world!".into());
 }
 
+
+// example function to be called from javascript with a string argument
+#[wasm_bindgen]
+pub fn greet(name: &str) -> String {
+    //console::log_1(&format!("Hello, {}!", name).into());
+     format!("Hello from Rust yazmeley {}!", name)
+}
+
+
+
 #[wasm_bindgen]
 pub fn start_server() {
     languageserver::start_server();

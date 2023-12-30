@@ -1,6 +1,6 @@
 import { createConnection, InitializeResult, DefinitionRequest, ProposedFeatures, InitializeParams, TextDocumentSyncKind } from 'vscode-languageserver';
 import * as rpc from 'vscode-jsonrpc';
-import * as solang from 'solang';
+//import * as solang from 'solang';
 import * as vscode from 'vscode';
 
 import * as fs from "fs";

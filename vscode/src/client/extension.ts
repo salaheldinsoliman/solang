@@ -6,15 +6,45 @@ import * as rpc from 'vscode-jsonrpc';
 import { promises as fs } from 'fs';
 import { LanguageClient, LanguageClientOptions, ServerOptions, Executable } from 'vscode-languageclient';
 import expandPathResolving from '../utils/expandPathResolving';
+import init, { greet } from '../pkg/solang';
+//import { Wasm } from '@vscode/wasm-wasi';
+import { commands, ExtensionContext, Uri, window, workspace } from 'vscode';
 import getServer from '../utils/getServer';
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 const outputChannel = vscode.window.createOutputChannel("My Extension Logs");
 
+
+
+
+
+
+
+export async function load_wasm(context: vscode.ExtensionContext) {
+
+  init().then(() => {
+    greet("Solang wasm hellloooooo");
+  }
+  ).catch((err) => {
+    console.log(err);
+  });
+
+}
+
+
+
+
 export async function activate(context: vscode.ExtensionContext) {
   console.log('heeeeeeeeeeeeeeeeeeeeeeere');
-  outputChannel.appendLine("SOLL HEEERE RJSDJExtension activated");
+
+
+
+  load_wasm(context);
+  // Load the WASM module
+  //const module = await wasm.createProcess();
+
+  //greet("Solang wasm hellloooooo");
   await tryActivate(context).catch((err) => {
     void vscode.window.showErrorMessage(`Cannot activate solang: ${err.message}`);
     throw err;

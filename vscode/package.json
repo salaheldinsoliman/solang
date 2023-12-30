@@ -30,7 +30,9 @@
 				"runtime": "node",
 				"configurationAttributes": {
 					"launch": {
-						"required": ["program"],
+						"required": [
+							"program"
+						],
 						"properties": {
 							"program": {
 								"type": "string",
@@ -39,7 +41,9 @@
 						}
 					}
 				},
-				"languages": ["javascript"]
+				"languages": [
+					"javascript"
+				]
 			}
 		],
 		"configuration": {
