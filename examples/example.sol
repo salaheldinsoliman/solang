@@ -172,4 +172,6 @@ contract example {
 		}
 		// all others score 0
 	}
+
+	let 
 }

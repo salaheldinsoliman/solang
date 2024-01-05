@@ -9,3 +9,4 @@ tests/create_me/
 .helix/
 .vscode/
 **/node_modules/
+vscode_web/solang/.vscode-test-web/*

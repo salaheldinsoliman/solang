@@ -4,6 +4,7 @@ use itertools::Itertools;
 use num_traits::ToPrimitive;
 use rust_lapper::{Interval, Lapper};
 use serde_json::Value;
+use tower_lsp::jsonrpc::{Response, self};
 use crate::codegen::{self, codegen, Expression};
 use crate::file_resolver::FileResolver;
 use crate::parse_and_resolve;
@@ -470,13 +471,22 @@ const REQUEST: &str = r#"{"jsonrpc":"2.0","method":"initialize","params": {
         }
     ]
 },"id":1}"#;
+
+const SECOND_REQUEST: &str = r#"{"jsonrpc":"2.0","method":"textDocument/hover","params": {"textDocument":{"uri":"file:///d%3A/solang_fork_final/solang/examples/example.sol"},"position":{"line":152,"character":54}}, "id":1}"#;
+
+fn mock_second_request() -> Vec<u8> {
+
+    format!("Content-Length: {}\r\n\r\n{}", SECOND_REQUEST.len(), SECOND_REQUEST).into_bytes()}
 fn mock_request() -> Vec<u8> {
 
     format!("Content-Length: {}\r\n\r\n{}", REQUEST.len(), REQUEST).into_bytes()}
 
+fn make_request_string(request: &str) -> Vec<u8> {
+    format!("Content-Length: {}\r\n\r\n{}", request.len(), request).into_bytes()
+}
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_server() -> ! {
+pub async fn start_server(request: &str) -> String {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
     /*let mut importpaths = Vec::new();
@@ -497,9 +507,11 @@ pub async fn start_server() -> ! {
 
 //let (mut stdin, mut stdout) = tokio::io::duplex(64 * 1024);
 
-let mock = mock_request();
+//let mock = mock_request();
+//let mock_second = mock_second_request();
 
-let stdin = BufReader::new(mock.as_slice());
+let request = make_request_string(request);
+let stdin = BufReader::new(request.as_slice());
 
 let mut stdout = BufWriter::new(Vec::new());
 
@@ -523,16 +535,18 @@ let (service, socket) = LspService::new(|client| SolangServer {
 });
 
 println!("Starting server");
-Server::new(stdin, &mut stdout, socket).serve(service).await;
+let server = Server::new(stdin, &mut stdout, socket);
+server.serve(service).await;
 
 let out = stdout.get_ref();
 
-
 println!("out string: {:?}", String::from_utf8(out.to_vec()).unwrap()  );
 
-println!("Server exited");
+return String::from_utf8(out.to_vec()).unwrap();
 
-std::process::exit(1);
+//println!("Server exited");
+
+//std::process::exit(1);
 }
 
 impl SolangServer {

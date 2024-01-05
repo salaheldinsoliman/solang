@@ -6,6 +6,7 @@
 //@ts-check
 'use strict';
 
+const assert = require('assert');
 //@ts-check
 /** @typedef {import('webpack').Configuration} WebpackConfig **/
 
@@ -18,7 +19,8 @@ const webExtensionConfig = {
 	target: 'webworker', // extensions run in a webworker context
 	entry: {
 		'extension': './src/web/extension.ts',
-		'test/suite/index': './src/web/test/suite/index.ts'
+		//'test/suite/index': './src/web/test/suite/index.ts',
+		//'language_server': './src/web/language_server.ts'
 	},
 	output: {
 		filename: '[name].js',
@@ -27,7 +29,7 @@ const webExtensionConfig = {
 		devtoolModuleFilenameTemplate: '../../[resource-path]'
 	},
 	resolve: {
-		mainFields: ['browser', 'module', 'main'], // look for `browser` entry point in imported node modules
+		mainFields: ['module', 'main'], // look for `browser` entry point in imported node modules
 		extensions: ['.ts', '.js'], // support ts-files and js-files
 		alias: {
 			// provides alternate implementation for node module and source files
@@ -39,10 +41,6 @@ const webExtensionConfig = {
 			'assert': require.resolve('assert')
 		}
 	},
-	experiments: {
-		asyncWebAssembly: true,
-		topLevelAwait: true
-	},
 	module: {
 		rules: [{
 			test: /\.ts$/,
@@ -51,10 +49,6 @@ const webExtensionConfig = {
 				loader: 'ts-loader'
 			}]
 		},
-		{
-			test: /\.wasm$/,
-			type: "asset/inline",
-		}
 		]
 	},
 	plugins: [
@@ -77,7 +71,61 @@ const webExtensionConfig = {
 	},
 };
 
-module.exports = [webExtensionConfig];
+
+const languagServerConfig = {
+	context: path.join(__dirname),
+	mode: 'none',
+	target: 'webworker', // web extensions run in a webworker context
+	entry: {
+		"language_server": './src/web/language_server.ts',
+	},
+	output: {
+		filename: '[name].js',
+		path: path.join(__dirname, 'dist', 'web'),
+		libraryTarget: 'var',
+		library: 'serverExportVar',
+	},
+	resolve: {
+		mainFields: ['module', 'main'],
+		extensions: ['.ts', '.js'], // support ts-files and js-files
+		alias: {},
+		fallback: {
+
+		},
+	},
+	experiments: {
+		asyncWebAssembly: true,
+		topLevelAwait: true
+	},
+	module: {
+		rules: [
+			{
+				test: /\.ts$/,
+				exclude: /node_modules/,
+				use: [
+					{
+						loader: 'ts-loader',
+					},
+				],
+			},
+			{
+				test: /\.wasm$/,
+				type: "asset/inline",
+			}
+		],
+	},
+	externals: {
+		vscode: 'commonjs vscode', // ignored because it doesn't exist
+	},
+	performance: {
+		hints: false,
+	},
+	devtool: 'source-map',
+};
+
+
+
+module.exports = [webExtensionConfig, languagServerConfig];
 
 
 

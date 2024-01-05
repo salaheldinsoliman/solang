@@ -9,102 +9,98 @@
   "categories": [
     "Other"
   ],
-  
-  "activationEvents": [
-    
-  ],
+  "activationEvents": [],
   "contributes": {
-		"debuggers": [
-			{
-				"type": "node",
-				"label": "Node.js",
-				"program": "./out/client/debugAdapter.js",
-				"runtime": "node",
-				"configurationAttributes": {
-					"launch": {
-						"required": [
-							"program"
-						],
-						"properties": {
-							"program": {
-								"type": "string",
-								"description": "Path to the program that should be debugged"
-							}
-						}
-					}
-				},
-				"languages": [
-					"javascript"
-				]
-			}
-		],
-		"configuration": {
-			"type": "object",
-			"title:": "Solang Solidity Compiler",
-			"properties": {
-				"solang.target": {
-					"scope": "window",
-					"type": "string",
-					"enum": [
-						"solana",
-						"polkadot",
-						"evm"
-					],
-					"default": "solana",
-					"description": "Chain to build for. The Solidity language changes in subtle ways depending on the target."
-				},
-				"solang.updates.askBeforeDownload": {
-					"type": "boolean",
-					"default": false,
-					"description": "Whether to ask for permission before downloading any files from the Internet"
-				},
-				"solidity.trace.server": {
-					"scope": "window",
-					"type": "string",
-					"enum": [
-						"off",
-						"messages",
-						"verbose"
-					],
-					"default": "verbose"
-				}
-			}
-		},
-		"capabilities": {
-			"hoverProvider": "true",
-			"formatting": {
-				"dynamicRegistration": true
-			}
-		},
-		"languages": [
-			{
-				"id": "solidity",
-				"aliases": [
-					"Solidity",
-					"solidity"
-				],
-				"extensions": [
-					".sol"
-				],
-				"configuration": "./solidity.configuration.json"
-			}
-		],
-		"snippets": [
-			{
-				"language": "solidity",
-				"path": "./snippets/solidity.json"
-			}
-		],
-		"grammars": [
-			{
-				"language": "solidity",
-				"scopeName": "source.solidity",
-				"path": "./syntaxes/solidity.json"
-			}
-		]
-	},
+    "debuggers": [
+      {
+        "type": "node",
+        "label": "Node.js",
+        "program": "./out/client/debugAdapter.js",
+        "runtime": "node",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the program that should be debugged"
+              }
+            }
+          }
+        },
+        "languages": [
+          "javascript"
+        ]
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title:": "Solang Solidity Compiler",
+      "properties": {
+        "solang.target": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "solana",
+            "polkadot",
+            "evm"
+          ],
+          "default": "solana",
+          "description": "Chain to build for. The Solidity language changes in subtle ways depending on the target."
+        },
+        "solang.updates.askBeforeDownload": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether to ask for permission before downloading any files from the Internet"
+        },
+        "solidity.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "verbose"
+        }
+      }
+    },
+    "capabilities": {
+      "hoverProvider": "true",
+      "formatting": {
+        "dynamicRegistration": true
+      }
+    },
+    "languages": [
+      {
+        "id": "solidity",
+        "aliases": [
+          "Solidity",
+          "solidity"
+        ],
+        "extensions": [
+          ".sol"
+        ],
+        "configuration": "./solidity.configuration.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "solidity",
+        "path": "./snippets/solidity.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "solidity",
+        "scopeName": "source.solidity",
+        "path": "./syntaxes/solidity.json"
+      }
+    ]
+  },
   "browser": "./dist/web/extension.js",
-  
   "scripts": {
     "test": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/suite/index.js",
     "pretest": "npm run compile-web",
@@ -116,20 +112,23 @@
     "run-in-browser": "vscode-test-web --browserType=chromium --extensionDevelopmentPath=. ."
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/mocha": "^10.0.6",
     "@types/assert": "^1.5.10",
-    "eslint": "^8.56.0",
+    "@types/mocha": "^10.0.6",
+    "@types/vscode": "^1.85.0",
+    "@types/webpack-env": "^1.18.4",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
-    "mocha": "^10.2.0",
-    "typescript": "^5.3.3",
     "@vscode/test-web": "^0.0.50",
-    "ts-loader": "^9.5.1",
-    "webpack": "^5.89.0",
-    "webpack-cli": "^5.1.4",
-    "@types/webpack-env": "^1.18.4",
     "assert": "^2.1.0",
-    "process": "^0.11.10"
+    "eslint": "^8.56.0",
+    "mocha": "^10.2.0",
+    "process": "^0.11.10",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
   }
 }

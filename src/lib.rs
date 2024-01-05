@@ -16,6 +16,7 @@ pub mod sema;
 use file_resolver::FileResolver;
 use sema::diagnostics;
 use solang_parser::pt;
+use tower_lsp::lsp_types::request;
 use std::{ffi::OsStr, fmt};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
@@ -167,6 +168,6 @@ pub fn greet(name: &str) -> String {
 
 
 #[wasm_bindgen]
-pub fn start_server() {
-    languageserver::start_server();
+pub fn start_server(request: &str) -> String {
+    languageserver::start_server(request)
 }

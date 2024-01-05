@@ -6,7 +6,7 @@ import * as rpc from 'vscode-jsonrpc';
 import { promises as fs } from 'fs';
 import { LanguageClient, LanguageClientOptions, ServerOptions, Executable } from 'vscode-languageclient';
 import expandPathResolving from '../utils/expandPathResolving';
-import init, { greet } from '../pkg/solang';
+//import init, { greet } from '../pkg/solang';
 //import { Wasm } from '@vscode/wasm-wasi';
 import { commands, ExtensionContext, Uri, window, workspace } from 'vscode';
 import getServer from '../utils/getServer';

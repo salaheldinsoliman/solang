@@ -1,40 +1,46 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-import * as vscode from 'vscode';
-import init, { greet } from './pkg';
-import wasmData from './pkg/solang_bg.wasm';
-//import * as wasm from './pkg'
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+import { ExtensionContext, Uri } from 'vscode';
+import { LanguageClientOptions } from 'vscode-languageclient';
+
+import { LanguageClient } from 'vscode-languageclient/browser';
 
 
-//import * as server from "./pkg/solang"
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
-const outputChannel = vscode.window.createOutputChannel("My Extension Logs");
+// this method is called when vs code is activated
+export function activate(context: ExtensionContext) {
 
-export function activate(context: vscode.ExtensionContext) {
+	console.log('lsp-web-extension-sample activated!');
+
+	/* 
+	 * all except the code to create the language client in not browser specific
+	 * and could be shared with a regular (Node) extension
+	 */
+	//const documentSelector = [{ language: 'plaintext' }];
+
+	// Options to control the language client
+	const clientOptions: LanguageClientOptions = {
+		documentSelector: [
+			{ language: 'solidity', scheme: 'file' },
+			{ language: 'solidity', scheme: 'untitled' },
+		],
+	};
+
+	const client = createWorkerLanguageClient(context, clientOptions);
+
+	const disposable = client.start();
+	//context.subscriptions.push(disposable);
 
 
-
-
-	init(wasmData).then(() => {
-		outputChannel.appendLine("WASM initialized");
-		let sesa = greet("sasa");
-		outputChannel.appendLine(sesa);
-	}
-	);
-
-
-	// Will be something like "file:///Users/billti/src/bqm/dist/hello_wasm_bg.wasm" running in VSCode.
-	// Something like "http://localhost:3000/static/devextensions/dist/hello_wasm_bg.wasm" with npx @vscode/test-web
-
-	outputChannel.appendLine("called activate");
-	outputChannel.appendLine("anyyyyyyyy111");
-
-
-	//outputChannel.appendLine(sesa);
-
-	//outputChannel.appendLine("Hello World from solang!");
 }
 
-// This method is called when your extension is deactivated
-export function deactivate() { }
+function createWorkerLanguageClient(context: ExtensionContext, clientOptions: LanguageClientOptions) {
+	// Create a worker. The worker main file implements the language server.
+	const serverMain = Uri.joinPath(context.extensionUri, 'dist', 'web', 'language_server.js');
+	const worker = new Worker(serverMain.toString(true));
+
+	// create the language server client to communicate with the server running in the worker
+	return new LanguageClient('solang', 'SOLANG', clientOptions, worker);
+}
