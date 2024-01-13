@@ -46,6 +46,7 @@ contract example {
 
 		return fahrenheit;
 	}
+	
 
 	/// Convert fahrenheit to celcius
 	function fahrenheit2celcius(int32 fahrenheit) pure public returns (int32) {

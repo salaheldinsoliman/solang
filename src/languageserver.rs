@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#![deny(clippy::all)]
+#![deny(unsafe_code)]
+
 use itertools::Itertools;
 use num_traits::ToPrimitive;
 use rust_lapper::{Interval, Lapper};
@@ -18,6 +21,7 @@ use crate::sema::{
 use crate::Target;
 
 use solang_parser::pt;
+use std::io::Read;
 use std::vec;
 use std::{
     collections::{HashMap, HashSet},
@@ -48,10 +52,13 @@ use tower_lsp::{
     },
     Client, LanguageServer, LspService, Server,
 };
-use tokio::io::{AsyncWriteExt, AsyncReadExt, AsyncRead, AsyncWrite, BufWriter};
+use tokio::io::{AsyncWriteExt, AsyncReadExt, AsyncRead, AsyncWrite, BufWriter, AsyncBufRead, BufStream};
 
-use tokio::io::BufReader;
 
+use futures::stream::TryStreamExt;
+
+use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen_futures::stream::JsStream;
 
 
 /// Represents the type of the code object that a reference points to
@@ -91,7 +98,7 @@ enum DefinitionType {
 ///
 /// But `def_path` paired with `def_type` sufficiently proves uniqueness as no two code objects defined in the same file can have identical `def_type`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct DefinitionIndex {
+pub struct DefinitionIndex {
     /// stores the path of the file where the code object is mentioned in source code
     def_path: PathBuf,
     /// provides information about the type of the code object in question
@@ -126,13 +133,13 @@ type Properties = HashMap<DefinitionIndex, HashMap<String, Option<DefinitionInde
 
 /// Stores information used by language server for every opened file
 #[derive(Default)]
-struct Files {
-    caches: HashMap<String, FileCache>,
-    text_buffers: HashMap<String, String>,
+pub struct Files {
+    pub caches: HashMap<String, FileCache>,
+    pub text_buffers: HashMap<String, String>,
 }
 
 #[derive(Debug)]
-struct FileCache {
+pub struct FileCache {
     file: ast::File,
     hovers: Lapper<usize, String>,
     references: Lapper<usize, DefinitionIndex>,
@@ -154,12 +161,12 @@ struct FileCache {
 /// * `implementations` maps the `DefinitionIndex` of a `Contract` to the `DefinitionIndex`s of methods defined as part of the `Contract`.
 /// * `properties` maps the `DefinitionIndex` of a code objects to the name and type of fields, variants or methods defined in the code object.
 #[derive(Default)]
-struct GlobalCache {
-    definitions: Definitions,
-    types: Types,
-    declarations: Declarations,
-    implementations: Implementations,
-    properties: Properties,
+pub struct GlobalCache {
+    pub definitions: Definitions,
+    pub types: Types,
+    pub declarations: Declarations,
+    pub implementations: Implementations,
+    pub properties: Properties,
 }
 
 impl GlobalCache {
@@ -193,12 +200,12 @@ impl GlobalCache {
 //
 // More information can be found here: https://github.com/hyperledger/solang/pull/1411
 pub struct SolangServer {
-    client: Client,
-    target: Target,
-    importpaths: Vec<PathBuf>,
-    importmaps: Vec<(String, PathBuf)>,
-    files: Mutex<Files>,
-    global_cache: Mutex<GlobalCache>,
+    pub client: Client,
+    pub target: Target,
+    pub importpaths: Vec<PathBuf>,
+    pub importmaps: Vec<(String, PathBuf)>,
+    pub files: Mutex<Files>,
+    pub global_cache: Mutex<GlobalCache>,
 }
 
 
@@ -485,35 +492,30 @@ fn make_request_string(request: &str) -> Vec<u8> {
     format!("Content-Length: {}\r\n\r\n{}", request.len(), request).into_bytes()
 }
 
+
+
+
+
+
+
+
+/* 
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_server(request: &str) -> String {
+pub async fn start_server(request: &str) -> ! {
     let mut importpaths = Vec::new();
     let mut importmaps = Vec::new();
-    /*let mut importpaths = Vec::new();
-    let mut importmaps = Vec::new();
 
-    if let Some(paths) = &language_args.import_path {
-        for path in paths {
-            importpaths.push(path.clone());
-        }
-    }
+   
 
-    if let Some(maps) = &language_args.import_map {
-        for (map, path) in maps {
-            importmaps.push((map.clone(), path.clone()));
-        }
-    }
-*/
 
-//let (mut stdin, mut stdout) = tokio::io::duplex(64 * 1024);
+    let mock = mock_request();
+    let mut in_buf: Vec<u8> = Vec::new();
+   
 
-//let mock = mock_request();
-//let mock_second = mock_second_request();
+   let (mut stdin, stdout) = tokio::io::duplex(1024);
 
-let request = make_request_string(request);
-let stdin = BufReader::new(request.as_slice());
-
-let mut stdout = BufWriter::new(Vec::new());
+   stdin.write(mock.as_slice()).await.unwrap();
+   
 
 
 let (service, socket) = LspService::new(|client| SolangServer {
@@ -534,22 +536,36 @@ let (service, socket) = LspService::new(|client| SolangServer {
     }),
 });
 
-println!("Starting server");
-let server = Server::new(stdin, &mut stdout, socket);
+
+let server = Server::new(stdin, stdout, socket);
 server.serve(service).await;
 
-let out = stdout.get_ref();
+println!("Hello, world!");
 
-println!("out string: {:?}", String::from_utf8(out.to_vec()).unwrap()  );
-
-return String::from_utf8(out.to_vec()).unwrap();
-
-//println!("Server exited");
-
-//std::process::exit(1);
-}
+std::process::exit(1);
+}*/
 
 impl SolangServer {
+
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+            target: Target::Solana,
+            importpaths: Vec::new(),
+            importmaps: Vec::new(),
+            files: Mutex::new(Files {
+                caches: HashMap::new(),
+                text_buffers: HashMap::new(),
+            }),
+            global_cache: Mutex::new(GlobalCache {
+                definitions: HashMap::new(),
+                types: HashMap::new(),
+                implementations: HashMap::new(),
+                declarations: HashMap::new(),
+                properties: HashMap::new(),
+            }),
+        }
+    }
 
     fn url_to_file_path(&self, uri: &Url) -> Result<PathBuf> {
         let path = uri.to_string();

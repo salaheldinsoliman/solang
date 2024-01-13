@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+#![deny(clippy::all)]
+#![deny(unsafe_code)]
 
 pub mod abi;
 pub mod codegen;
@@ -12,14 +14,31 @@ pub mod languageserver;
 // when code-misparses. The error will be added to the namespace diagnostics, no need to have anything but unit
 // as error.
 pub mod sema;
-
+use tower_lsp::{
+    jsonrpc::{Error, ErrorCode,},
+   
+        
+    Client, LanguageServer, LspService, Server,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsString,
+    path::PathBuf,
+};
+use tokio::sync::Mutex;
+use crate::languageserver::{SolangServer, Files, GlobalCache};
 use file_resolver::FileResolver;
 use sema::diagnostics;
 use solang_parser::pt;
-use tower_lsp::lsp_types::request;
 use std::{ffi::OsStr, fmt};
-use wasm_bindgen::prelude::*;
-use web_sys::console;
+
+use futures::stream::{TryStreamExt, IntoAsyncRead, };
+use wasm_bindgen::{prelude::*, JsCast};
+use wasm_bindgen_futures::stream::{JsStream,  };
+use tokio::io::{AsyncRead, AsyncWriteExt, AsyncReadExt, };
+use web_sys::{ReadableStream, WritableStream,  ReadableByteStreamController};
+
+
 
 /// The target chain you want to compile Solidity for.
 #[derive(Debug, Clone, Copy)]
@@ -150,12 +169,12 @@ pub fn parse_and_resolve(
     ns
 }
 
-
+/* 
 #[wasm_bindgen]
 pub fn trial() {
     // write to consol.log in browser
     console::log_1(&"Hello world!".into());
-}
+}*/
 
 
 // example function to be called from javascript with a string argument
@@ -166,8 +185,110 @@ pub fn greet(name: &str) -> String {
 }
 
 
-
+/* 
 #[wasm_bindgen]
 pub fn start_server(request: &str) -> String {
     languageserver::start_server(request)
 }
+*/
+
+
+
+#[wasm_bindgen]
+pub fn start_listener(stream: js_sys::AsyncIterator) -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
+    web_sys::console::log_1(&"server::serve".into());
+
+    let sesa = stream.as_string().unwrap();
+    println!("sema: {:?}", sesa);
+    Ok(())
+    
+}
+
+
+
+
+
+
+
+#[wasm_bindgen]
+pub struct ServerConfig {
+    into_server: js_sys::AsyncIterator,
+    from_server: web_sys::WritableStream,
+}
+
+#[wasm_bindgen]
+impl ServerConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new(into_server: js_sys::AsyncIterator, from_server: web_sys::WritableStream) -> Self {
+        Self {
+            into_server,
+            from_server,
+        }
+    }
+}
+
+
+
+
+#[wasm_bindgen]
+pub async fn start_server(config: ServerConfig) -> Result<(), JsValue>  {
+
+    console_error_panic_hook::set_once();
+
+    web_sys::console::log_1(&"server::serve".into());
+
+    let ServerConfig {
+        into_server,
+        from_server,
+    } = config;
+
+    //tree_sitter::TreeSitter::init().await?;
+    //let language = demo_lsp_language::language::javascript().await.unwrap();
+
+    let input = JsStream::from(into_server);
+    let input = input
+        .map_ok(|value| {
+            value
+                .dyn_into::<js_sys::Uint8Array>()
+                .expect("could not cast stream item to Uint8Array")
+                .to_vec()
+        })
+        .map_err(|_err| std::io::Error::from(std::io::ErrorKind::Other))
+        .into_async_read();
+
+    let output = JsCast::unchecked_into::<wasm_streams::writable::sys::WritableStream>(from_server);
+    let output = wasm_streams::WritableStream::from_raw(output);
+    let output = output.try_into_async_write().map_err(|err| err.0)?;
+
+
+
+    let mut importpaths = Vec::new();
+    let mut importmaps = Vec::new();
+
+    
+let (service, socket) = LspService::new(|client| 
+SolangServer::new(client));
+
+let server = Server::new(input, output, socket).serve(service).await;
+
+Ok(())
+}
+
+
+
+
+/* 
+#[wasm_bindgen]
+pub async fn listen_and_echo() -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
+    web_sys::console::log_1(&"server::serve".into());
+
+    
+
+    
+
+    Ok(())
+}*/

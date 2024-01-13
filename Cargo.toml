@@ -11,8 +11,6 @@ rust-version = "1.72.0"
 edition = "2021"
 exclude = [ "/.*", "/docs",  "/examples", "/solana-library", "/tests", "/integration", "/vscode", "/testdata" ]
 
-[build-dependencies]
-cc = "1.0"
 
 [dependencies]
 regex = "1"
@@ -32,8 +30,10 @@ contract-metadata = "3.2"
 semver = { version = "1.0", features = ["serde"] }
 tempfile = "3.8"
 libc = { version = "0.2", optional = true }
-tower-lsp = "0.20"
+tower-lsp = { version = "0.17.0" }
 tokio = { version = "1.27", features = ["rt", "macros", "sync", "io-util"] }
+#tokio-util = { version = "0.7.10", features = ["codec", "compat"] }
+futures = "0.3.30"
 base58 = "0.2.0"
 sha2 = "0.10"
 ripemd = "0.1"
@@ -64,9 +64,15 @@ normalize-path = "0.2.1"
 bitflags = "2.3.3"
 scopeguard = "1.2.0"
 #ethers-core = { version = "2.0.10", optional = true }
-wasm-bindgen = "0.2"
+wasm-bindgen = "0.2.81"
 reqwest = "0.11.20"
-web-sys = { version = "0.3.66", features = ['console'] }
+web-sys = { version = "0.3.66", features = ['console', "Window", "MessageEvent", "Request", "WritableStream", "ReadableStream"] }
+wasm-bindgen-futures = { version = "0.4.39", features = ["futures-core-03-stream"] }
+wasm-streams = "0.4.0"
+js-sys = "0.3.66"
+console_error_panic_hook = "0.1.7"
+futures-io-preview = "0.2.2"
+
 
 [package.metadata.docs.rs]
 no-default-features = true
