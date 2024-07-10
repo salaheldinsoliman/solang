@@ -102,6 +102,8 @@ pub fn function_dispatch(
 
         wrapper_cfg.add(&mut vartab, placeholder);
 
+        
+        if value.len() == 1 {
         // set the msb 8 bits of the return value to 6, the return value is 64 bits.
         // FIXME: this assumes that the solidity function always returns one value.
         let shifted = Expression::ShiftLeft {
@@ -131,6 +133,18 @@ pub fn function_dispatch(
         };
 
         wrapper_cfg.add(&mut vartab, Instr::Return { value: vec![added] });
+    } else {
+
+        // return 2 as numberliteral
+        let two = Expression::NumberLiteral {
+            loc: pt::Loc::Codegen,
+            ty: Type::Uint(64),
+            value: BigInt::from(2_u64),
+        };
+
+        wrapper_cfg.add(&mut vartab, Instr::Return { value: vec![two] });
+    }
+
 
         vartab.finalize(ns, &mut wrapper_cfg);
         cfg.public = false;

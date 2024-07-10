@@ -2,8 +2,8 @@
 
 use crate::codegen::cfg::HashTy;
 use crate::codegen::Expression;
-use crate::emit::binary::Binary;
-use crate::emit::soroban::{SorobanTarget, GET_CONTRACT_DATA, PUT_CONTRACT_DATA};
+use crate::emit::binary::{self, Binary};
+use crate::emit::soroban::{SorobanTarget, GET_CONTRACT_DATA, LOG_FROM_LINEAR_MEMORY, PUT_CONTRACT_DATA};
 use crate::emit::ContractArgs;
 use crate::emit::{TargetRuntime, Variable};
 use crate::emit_context;
@@ -13,8 +13,7 @@ use crate::sema::ast::{Function, Namespace, Type};
 
 use inkwell::types::{BasicTypeEnum, IntType};
 use inkwell::values::{
-    ArrayValue, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue,
-    PointerValue,
+    AnyValue, ArrayValue, AsValueRef, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue
 };
 
 use solang_parser::pt::Loc;
@@ -236,7 +235,54 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
     /// Prints a string
     /// TODO: Implement this function, with a call to the `log` function in the Soroban runtime.
-    fn print(&self, bin: &Binary, string: PointerValue, length: IntValue) {}
+    fn print(&self, bin: &Binary, string: PointerValue, length: IntValue) {
+
+
+
+       /*  let mut toprint;
+        unsafe {
+        toprint = string.as_value_ref().offset(0);
+        println!( "TO PRINT! {:?}", toprint);
+        }
+        //println!("print called with string: {:?} ", string.as_value_ref());
+        println!("msg_pos: {:?}", string);
+        println!("length: {:?}", length);
+        println!("=============================================================");*/
+
+        
+
+        let length = bin.context.i64_type().const_int(1024, false);
+
+       
+        let msg_pos = bin.context.i64_type().const_int(0, false);
+
+        let eight = bin.context.i64_type().const_int(8, false);
+        let four = bin.context.i64_type().const_int(4, false);
+
+        // encode msg_pos and length
+        let msg_pos_encoded = bin.builder.build_left_shift(msg_pos, eight, "temp").unwrap();
+        let msg_pos_encoded = bin.builder.build_int_add(msg_pos_encoded, four, "msg_pos_encoded").unwrap();
+
+
+
+        let length_encoded = bin.builder.build_left_shift(length, eight, "temp").unwrap();
+        let length_encoded = bin.builder.build_int_add(length_encoded, four, "length_encoded").unwrap();
+
+
+
+
+        let call_res = bin.builder.build_call(
+            bin.module.get_function(LOG_FROM_LINEAR_MEMORY).unwrap(),
+            &[
+                msg_pos_encoded.into(),
+                length_encoded.into(),
+                four.into(),
+                four.into(),
+            ],
+            "log",
+        ).unwrap();
+
+    }
 
     /// Return success without any result
     fn return_empty_abi(&self, bin: &Binary) {
