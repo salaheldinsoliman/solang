@@ -16,6 +16,7 @@ use inkwell::values::{
     AnyValue, ArrayValue, AsValueRef, BasicMetadataValueEnum, BasicValue, BasicValueEnum, FunctionValue, IntValue, PointerValue
 };
 
+use inkwell::AddressSpace;
 use solang_parser::pt::Loc;
 
 use std::collections::HashMap;
@@ -239,7 +240,7 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
 
 
-       /*  let mut toprint;
+       let mut toprint;
         unsafe {
         toprint = string.as_value_ref().offset(0);
         println!( "TO PRINT! {:?}", toprint);
@@ -247,26 +248,44 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         //println!("print called with string: {:?} ", string.as_value_ref());
         println!("msg_pos: {:?}", string);
         println!("length: {:?}", length);
-        println!("=============================================================");*/
+
+        let msg_pos = bin.builder.build_ptr_to_int(string, bin.context.i64_type(), "msg_pos").unwrap();
+
+        let msg_pos = msg_pos.const_cast(bin.context.i64_type(), false);
 
         
 
-        let length = bin.context.i64_type().const_int(1024, false);
+        println!("msg_pos extracted: {:?}", msg_pos);
+        println!("=============================================================");
+
+
+        
+
+        //let length = bin.context.i64_type().const_int(1024, false);
+
+        let length = length.const_cast(bin.context.i64_type(), false);
 
        
-        let msg_pos = bin.context.i64_type().const_int(0, false);
-
         let eight = bin.context.i64_type().const_int(8, false);
         let four = bin.context.i64_type().const_int(4, false);
+        let zero = bin.context.i64_type().const_int(0, false);
+        let thirty_two = bin.context.i64_type().const_int(32, false);
 
         // encode msg_pos and length
-        let msg_pos_encoded = bin.builder.build_left_shift(msg_pos, eight, "temp").unwrap();
+        let msg_pos_encoded = bin.builder.build_left_shift(msg_pos, thirty_two, "temp").unwrap();
         let msg_pos_encoded = bin.builder.build_int_add(msg_pos_encoded, four, "msg_pos_encoded").unwrap();
 
 
 
-        let length_encoded = bin.builder.build_left_shift(length, eight, "temp").unwrap();
+        let length_encoded = bin.builder.build_left_shift(length, thirty_two, "temp").unwrap();
         let length_encoded = bin.builder.build_int_add(length_encoded, four, "length_encoded").unwrap();
+
+
+        let zero_encoded = bin.builder.build_left_shift(zero, eight, "temp").unwrap();
+        
+
+        let eight_encoded = bin.builder.build_left_shift(eight, eight, "temp").unwrap();
+        let eight_encoded = bin.builder.build_int_add(eight_encoded, four, "eight_encoded").unwrap();
 
 
 
@@ -276,7 +295,7 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
             &[
                 msg_pos_encoded.into(),
                 length_encoded.into(),
-                four.into(),
+                msg_pos_encoded.into(),
                 four.into(),
             ],
             "log",
