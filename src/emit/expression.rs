@@ -1541,6 +1541,8 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             initializer,
             ..
         } => {
+
+            println!("testing filename: {:?}",  bin.name);
             println!("alloc dynamic bytes");
             println!("TYYY {:?}", ty);
             println!("SIZE {:?}", size);
@@ -1569,6 +1571,11 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
 
                 println!("size is number literal");
                 println!("ty {:?}", ty);
+                println!("value {:?}", value);
+
+                if let Some(init) = initializer  {
+                    
+                
 
                 let init = initializer.as_ref().unwrap();
 
@@ -1601,6 +1608,40 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
                             .into(),
                     ])
                     .into()
+                } else {
+
+                    let typee = BasicTypeEnum::StructType(
+                        bin.context.struct_type(
+                            &[
+                                bin.llvm_type(ty, ns)
+                                    .ptr_type(AddressSpace::default())
+                                    .into(),
+                                bin.context
+                                    .custom_width_int_type(ns.target.ptr_size().into())
+                                    .into(),
+                            ],
+                            false,
+                        ),
+                    ).into_struct_type();
+    
+                    println!("typee {:?}", typee);
+                
+
+                    let null = bin.context.custom_width_int_type(ns.target.ptr_size().into()).ptr_type(AddressSpace::default()).const_null();
+    
+    
+                       let nones =  typee.const_named_struct(&[
+                            null.into(),
+                            bin.context
+                                .custom_width_int_type(ns.target.ptr_size().into())
+                                .const_int(0_u64, false)
+                                .into(),
+                        ])
+                        ;
+
+                    null.into()
+                }
+                
              
             }
             else {
