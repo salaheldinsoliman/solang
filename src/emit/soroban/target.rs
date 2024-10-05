@@ -356,7 +356,15 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         ns: &Namespace,
         loc: Loc,
     ) {
-        unimplemented!()
+
+
+        println!("payload {:?}", payload);
+
+        println!("call external function {:?}", ty);
+        println!("function name: {:?}", payload);
+        println!("function name: {:?}", contract_args);
+        println!("External call!!!!");
+        //unimplemented!()
     }
 
     /// send value to address
@@ -387,7 +395,10 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
     /// Return the return data from an external call (either revert error or return values)
     fn return_data<'b>(&self, bin: &Binary<'b>, function: FunctionValue<'b>) -> PointerValue<'b> {
-        unimplemented!()
+
+        println!("Return data!!!!");
+        bin.context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null()
+        //unimplemented!()
     }
 
     /// Return the value we received

@@ -38,6 +38,7 @@ pub struct Variable<'a> {
     value: BasicValueEnum<'a>,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct ContractArgs<'b> {
     program_id: Option<PointerValue<'b>>,
     value: Option<IntValue<'b>>,
