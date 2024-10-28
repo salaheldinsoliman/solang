@@ -886,15 +886,23 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             ..
         } => {
 
+<<<<<<< HEAD
             println!("===========================================================================");
+=======
+>>>>>>> eb3ce7d1e3092a77e094cc8af51a519c8b7d10e2
             println!("Payload {:?}", payload);
             println!("Value {:?}", value);
             println!("Address {:?}", address);
 
+<<<<<<< HEAD
             
 
 
             let loc = payload[0].loc();
+=======
+
+            let loc = payload.loc();
+>>>>>>> eb3ce7d1e3092a77e094cc8af51a519c8b7d10e2
             let gas = expression(target, bin, gas, &w.vars, function, ns).into_int_value();
             let value = expression(target, bin, value, &w.vars, function, ns).into_int_value();
             let payload_ty = payload[0].ty();
