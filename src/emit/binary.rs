@@ -907,8 +907,11 @@ impl<'a> Binary<'a> {
 
     /// Return the llvm type for the resolved type.
     pub(crate) fn llvm_type(&self, ty: &Type, ns: &Namespace) -> BasicTypeEnum<'a> {
+
+        println!("LLVM TYPE {:?}", ty);
         emit_context!(self);
         if ty.is_builtin_struct() == Some(StructType::AccountInfo) {
+            print!("AccountInfo");
             return self
                 .context
                 .struct_type(
@@ -927,6 +930,7 @@ impl<'a> Binary<'a> {
                 )
                 .as_basic_type_enum();
         } else {
+            println!("Not AccountInfo");
             match ty {
                 Type::Bool => BasicTypeEnum::IntType(self.context.bool_type()),
                 Type::Int(n) | Type::Uint(n) => {
@@ -937,7 +941,8 @@ impl<'a> Binary<'a> {
                         .custom_width_int_type(ns.value_length as u32 * 8),
                 ),
                 Type::Contract(_) | Type::Address(_) => {
-                    BasicTypeEnum::ArrayType(self.address_type(ns))
+                    //BasicTypeEnum::ArrayType(self.address_type(ns))
+                    BasicTypeEnum::IntType(self.context.i64_type())
                 }
                 Type::Bytes(n) => {
                     BasicTypeEnum::IntType(self.context.custom_width_int_type(*n as u32 * 8))
@@ -1014,6 +1019,9 @@ impl<'a> Binary<'a> {
                     .as_basic_type_enum(),
                 Type::FunctionSelector => {
                     self.llvm_type(&Type::Bytes(ns.target.selector_length()), ns)
+                }
+                Type::Val => {
+                    self.context.i64_type().as_basic_type_enum()
                 }
                 _ => unreachable!(),
             }

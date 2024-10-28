@@ -885,16 +885,28 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             flags,
             ..
         } => {
-            let loc = payload.loc();
+
+            println!("===========================================================================");
+            println!("Payload {:?}", payload);
+            println!("Value {:?}", value);
+            println!("Address {:?}", address);
+
+            
+
+
+            let loc = payload[0].loc();
             let gas = expression(target, bin, gas, &w.vars, function, ns).into_int_value();
             let value = expression(target, bin, value, &w.vars, function, ns).into_int_value();
-            let payload_ty = payload.ty();
-            let payload = expression(target, bin, payload, &w.vars, function, ns);
+            let payload_ty = payload[0].ty();
+            let mut payload = payload.iter().map(|p| expression(target, bin, p, &w.vars, function, ns)).collect::<Vec<BasicValueEnum>>();
+            
 
             let address = if let Some(address) = address {
                 let address = expression(target, bin, address, &w.vars, function, ns);
 
-                let addr = bin.build_array_alloca(
+                println!("Address Before{:?}", address);
+
+                /*let addr = bin.build_array_alloca(
                     function,
                     bin.context.i8_type(),
                     bin.context
@@ -903,23 +915,23 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                     "address",
                 );
 
-                bin.builder.build_store(addr, address).unwrap();
+                bin.builder.build_store(addr, address).unwrap();*/
 
-                Some(addr)
+                Some(address)
             } else {
                 None
             };
 
             let accounts = process_account_metas(target, accounts, bin, &w.vars, function, ns);
 
-            let (payload_ptr, payload_len) = if payload_ty == Type::DynamicBytes {
-                (bin.vector_bytes(payload), bin.vector_len(payload))
+            /*let (payload_ptr, payload_len) = if payload_ty == Type::DynamicBytes {
+                (bin.vector_bytes(payload[0]), bin.vector_len(payload[0]))
             } else {
-                let ptr = payload.into_pointer_value();
+                let ptr = payload[0].into_pointer_value();
                 let len = bin.llvm_type(&payload_ty, ns).size_of().unwrap();
 
                 (ptr, len)
-            };
+            };*/
 
             // sol_invoke_signed_c() takes of a slice of a slice of slice of bytes
             // 1. A single seed value is a slice of bytes.
@@ -940,12 +952,14 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
                 None => None,
             };
 
+            
+
             target.external_call(
                 bin,
                 function,
                 success,
-                payload_ptr,
-                payload_len,
+                payload,
+                bin.context.i64_type().const_zero(),
                 address,
                 ContractArgs {
                     program_id: None,

@@ -279,7 +279,14 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                 } => {
                     let value = expression(value, Some(&vars), cfg, ns).0;
                     let gas = expression(gas, Some(&vars), cfg, ns).0;
-                    let payload = expression(payload, Some(&vars), cfg, ns).0;
+                    //let payload = expression(&payload[0], Some(&vars), cfg, ns).0;
+
+                    let args_vec = payload
+                        .iter()
+                        .map(|e| expression(e, Some(&vars), cfg, ns).0)
+                        .collect::<Vec<Expression>>();
+
+
                     let address = address
                         .as_ref()
                         .map(|expr| expression(expr, Some(&vars), cfg, ns).0);
@@ -298,7 +305,7 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                             address,
                             accounts,
                             seeds,
-                            payload,
+                            payload: args_vec,
                             value,
                             gas,
                             callty: callty.clone(),

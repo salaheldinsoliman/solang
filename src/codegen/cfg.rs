@@ -137,12 +137,13 @@ pub enum Instr {
         address: Option<Expression>,
         accounts: ExternalCallAccounts<Expression>,
         seeds: Option<Expression>,
-        payload: Expression,
+        payload: Vec<Expression>,
         value: Expression,
         gas: Expression,
         callty: CallTy,
         contract_function_no: Option<(usize, usize)>,
         flags: Option<Expression>,
+        //args: Vec<Expression>
     },
     /// Value transfer; either address.send() or address.transfer()
     ValueTransfer {
@@ -314,7 +315,10 @@ impl Instr {
                 if let Some(expr) = address {
                     expr.recurse(cx, f);
                 }
-                payload.recurse(cx, f);
+                //payload.recurse(cx, f);
+                for expr in payload {
+                    expr.recurse(cx, f);
+                }
                 value.recurse(cx, f);
                 gas.recurse(cx, f);
             }
@@ -632,11 +636,14 @@ impl ControlFlowGraph {
                 format!("{}", String::from_utf8_lossy(value))
             }
             Expression::BytesLiteral { value, .. } => format!("hex\"{}\"", hex::encode(value)),
-            Expression::NumberLiteral {
+            Expression::NumberLiteral { 
                 ty: ty @ Type::Address(_),
                 value,
                 ..
             } => {
+                println!("EXPR IS NUMBER LITERALLLL");
+                println!("TY IS {:?}", ty);
+                println!("VALUE IS {:?}", value);
                 format!("{} {:#x}", ty.to_string(ns), value)
             }
             Expression::NumberLiteral { ty, value, .. } => {
@@ -1194,7 +1201,7 @@ impl ControlFlowGraph {
                     } else {
                         String::new()
                     },
-                    self.expr_to_string(contract, ns, payload),
+                    self.expr_to_string(contract, ns, &payload[0]),
                     self.expr_to_string(contract, ns, value),
                     self.expr_to_string(contract, ns, gas),
                     if let ExternalCallAccounts::Present(accounts) = accounts {

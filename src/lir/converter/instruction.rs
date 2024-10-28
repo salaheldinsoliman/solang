@@ -213,7 +213,7 @@ impl Converter<'_> {
                 let accounts_op =
                     self.to_external_call_accounts_and_insns(accounts, vartable, results);
                 let seeds_op = self.to_operand_option_and_insns(seeds, vartable, results);
-                let payload_op = self.to_operand_and_insns(payload, vartable, results);
+                let payload_op = self.to_operand_and_insns(&payload[0], vartable, results);
                 let value_op = self.to_operand_and_insns(value, vartable, results);
                 let gas_op = self.to_operand_and_insns(gas, vartable, results);
                 let flags_op = self.to_operand_option_and_insns(flags, vartable, results);

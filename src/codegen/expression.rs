@@ -568,6 +568,8 @@ pub fn expression(
             args: func_expr,
             ..
         } => {
+
+            println!("EXPRESSSSSION {:?}", func_expr);
             if let ast::Expression::ExternalFunction { address, .. } = &func_expr[0] {
                 expression(address, cfg, contract_no, func, ns, vartab, opt)
             } else {
@@ -606,13 +608,23 @@ pub fn expression(
                 value: emitter.selector(contract_no),
             }
         }
-        ast::Expression::InternalFunctionCall { .. }
-        | ast::Expression::ExternalFunctionCall { .. }
-        | ast::Expression::ExternalFunctionCallRaw { .. }
+        ast::Expression::ExternalFunctionCallRaw { args, .. } => {
+            println!("args {:?}", args);
+            //unreachable!()
+
+            let mut returns = emit_function_call(expr, contract_no, cfg, func, ns, vartab, opt);
+
+            returns.remove(0)
+        }
+        ast::Expression::InternalFunctionCall { args,.. }
+        | ast::Expression::ExternalFunctionCall { args,.. }
         | ast::Expression::Builtin {
             kind: ast::Builtin::AbiDecode,
+            args,
             ..
         } => {
+
+            println!("EHH BA@A");
             let mut returns = emit_function_call(expr, contract_no, cfg, func, ns, vartab, opt);
 
             returns.remove(0)
@@ -1618,7 +1630,7 @@ fn payable_send(
                 address: Some(address),
                 accounts: ExternalCallAccounts::AbsentArgument,
                 seeds: None,
-                payload: Expression::AllocDynamicBytes {
+                payload: vec![Expression::AllocDynamicBytes {
                     loc: *loc,
                     ty: Type::DynamicBytes,
                     size: Box::new(Expression::NumberLiteral {
@@ -1627,7 +1639,7 @@ fn payable_send(
                         value: BigInt::from(0),
                     }),
                     initializer: Some(vec![]),
-                },
+                }],
                 value,
                 gas: Expression::NumberLiteral {
                     loc: *loc,
@@ -1684,7 +1696,7 @@ fn payable_transfer(
                 accounts: ExternalCallAccounts::AbsentArgument,
                 seeds: None,
                 address: Some(address),
-                payload: Expression::AllocDynamicBytes {
+                payload: vec![Expression::AllocDynamicBytes {
                     loc: *loc,
                     ty: Type::DynamicBytes,
                     size: Box::new(Expression::NumberLiteral {
@@ -1693,7 +1705,7 @@ fn payable_transfer(
                         value: BigInt::from(0),
                     }),
                     initializer: Some(vec![]),
-                },
+                }],
                 value,
                 gas: Expression::NumberLiteral {
                     loc: *loc,
@@ -2748,6 +2760,8 @@ pub fn emit_function_call(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Vec<Expression> {
+    println!("emit_function_call");
+    println!("expr: {:?}", expr);
     match expr {
         ast::Expression::InternalFunctionCall { function, args, .. } => {
             if let ast::Expression::InternalFunction {
@@ -2891,7 +2905,18 @@ pub fn emit_function_call(
             call_args,
             ty,
         } => {
-            let args = expression(args, cfg, caller_contract_no, func, ns, vartab, opt);
+
+
+            //let args = expression(&args[0], cfg, caller_contract_no, func, ns, vartab, opt);
+
+            let mut args_vec = Vec::new();
+
+            for arg in args {
+                args_vec.push(expression(arg, cfg, caller_contract_no, func, ns, vartab, opt));
+            }
+
+            println!("args_vec: {:?}", args_vec);
+
             let address = expression(address, cfg, caller_contract_no, func, ns, vartab, opt);
             let gas = if let Some(gas) = &call_args.gas {
                 expression(gas, cfg, caller_contract_no, func, ns, vartab, opt)
@@ -2922,13 +2947,15 @@ pub fn emit_function_call(
                 .as_ref()
                 .map(|expr| expression(expr, cfg, caller_contract_no, func, ns, vartab, opt));
 
+
+            println!("INSERTING EXTERNAL CALL WITH VEC {:?}", args_vec);
             cfg.add(
                 vartab,
                 Instr::ExternalCall {
                     loc: *loc,
                     success: Some(success),
                     address: Some(address),
-                    payload: args,
+                    payload: args_vec,
                     value,
                     accounts,
                     seeds,
@@ -2972,6 +2999,8 @@ pub fn emit_function_call(
             call_args,
             ..
         } => {
+
+            println!("INSIDE EXTERNAL FUNCTION CALL");
             if let ast::Expression::ExternalFunction {
                 function_no,
                 address,
@@ -3043,7 +3072,7 @@ pub fn emit_function_call(
                         success,
                         accounts,
                         address: Some(address),
-                        payload,
+                        payload: Vec::new(),
                         seeds,
                         value,
                         gas,
@@ -3131,7 +3160,7 @@ pub fn emit_function_call(
                         accounts: ExternalCallAccounts::AbsentArgument,
                         seeds: None,
                         address: Some(address),
-                        payload,
+                        payload: Vec::new(),
                         value,
                         gas,
                         callty: CallTy::Regular,

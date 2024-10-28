@@ -35,9 +35,13 @@ pub(super) fn abi_encode(
     args: Vec<Expression>,
     ns: &Namespace,
     vartab: &mut Vartable,
-    cfg: &mut ControlFlowGraph,
+    cfg: &mut ControlFlowGraph,  
     packed: bool,
 ) -> (Expression, Expression) {
+    println!("abi_encode");
+    for arg in &args {
+        println!("arg {:?}", arg);
+    }
     let mut encoder = create_encoder(ns, packed);
     let size = calculate_size_args(&mut encoder, &args, ns, vartab, cfg);
     let encoded_bytes = vartab.temp_name("abi_encoded", &Type::DynamicBytes);
@@ -204,6 +208,7 @@ pub(crate) trait AbiEncoding {
         let expr_ty = &expr.ty().unwrap_user_type(ns);
         match expr_ty {
             Type::Contract(_) | Type::Address(_) => {
+                println!("encode_address");
                 self.encode_directly(expr, buffer, offset, vartab, cfg, ns.address_length.into())
             }
             Type::Bool => self.encode_directly(expr, buffer, offset, vartab, cfg, 1.into()),
@@ -214,9 +219,11 @@ pub(crate) trait AbiEncoding {
                 self.encode_directly(expr, buffer, offset, vartab, cfg, ns.value_length.into())
             }
             Type::Bytes(length) => {
+                
                 self.encode_directly(expr, buffer, offset, vartab, cfg, (*length).into())
             }
             Type::String | Type::DynamicBytes => {
+                println!("encode_bytes");
                 self.encode_bytes(expr, buffer, offset, ns, vartab, cfg)
             }
             Type::Enum(_) => self.encode_directly(expr, buffer, offset, vartab, cfg, 1.into()),
@@ -270,7 +277,8 @@ pub(crate) trait AbiEncoding {
             Type::InternalFunction { .. }
             | Type::Void
             | Type::BufferPointer
-            | Type::Mapping(..) => unreachable!("This type cannot be encoded"),
+            | Type::Mapping(..)
+            | Type::Val => unreachable!("This type cannot be encoded"),
         }
     }
 
@@ -310,6 +318,7 @@ pub(crate) trait AbiEncoding {
         cfg: &mut ControlFlowGraph,
         width: u16,
     ) -> Expression {
+        println!("encode_int");
         let encoding_size = width.next_power_of_two();
         let expr = if encoding_size != width {
             if expr.ty().is_signed_int(ns) {
@@ -366,6 +375,10 @@ pub(crate) trait AbiEncoding {
         vartab: &mut Vartable,
         cfg: &mut ControlFlowGraph,
     ) -> Expression {
+
+        println!("encoding expr {:?}", expr);
+        println!("encoding buffer {:?}", buffer);
+
         let len = array_outer_length(expr, vartab, cfg);
         let (data_offset, size) = if self.is_packed() {
             (offset.clone(), None)
@@ -884,7 +897,8 @@ pub(crate) trait AbiEncoding {
             | Type::Unreachable
             | Type::Void
             | Type::FunctionSelector
-            | Type::Mapping(..) => unreachable!("Type should not appear on an encoded buffer"),
+            | Type::Mapping(..)
+            | Type::Val => unreachable!("Type should not appear on an encoded buffer"),
         }
     }
 
@@ -1432,7 +1446,8 @@ pub(crate) trait AbiEncoding {
             | Type::Void
             | Type::Unreachable
             | Type::BufferPointer
-            | Type::Mapping(..) => unreachable!("This type cannot be encoded"),
+            | Type::Mapping(..)
+            | Type::Val => unreachable!("This type cannot be encoded"),
             Type::UserType(_) | Type::Unresolved | Type::Rational => {
                 unreachable!("Type should not exist in codegen")
             }

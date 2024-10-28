@@ -263,7 +263,7 @@ fn exec_try(
                         address: Some(address),
                         accounts: ExternalCallAccounts::AbsentArgument,
                         seeds: None,
-                        payload,
+                        payload: vec![payload],
                         value,
                         gas,
                         callty: CallTy::Regular,

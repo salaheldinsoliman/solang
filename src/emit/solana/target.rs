@@ -1485,15 +1485,24 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
         binary: &Binary<'b>,
         function: FunctionValue<'b>,
         _success: Option<&mut BasicValueEnum<'b>>,
-        payload: PointerValue<'b>,
+        payload: Vec<BasicValueEnum<'b>>,
         payload_len: IntValue<'b>,
-        address: Option<PointerValue<'b>>,
+        address: Option<BasicValueEnum<'b>>,
         mut contract_args: ContractArgs<'b>,
         _ty: ast::CallTy,
         ns: &ast::Namespace,
         _loc: Loc,
     ) {
-        let address = address.unwrap();
+        let address = binary.build_array_alloca(
+            function,
+            binary.context.i8_type(),
+            binary.context
+                .i32_type()
+                .const_int(ns.address_length as u64, false),
+            "address",
+        );
+
+        binary.builder.build_store(address, address).unwrap();
 
         if contract_args.accounts.is_none() {
             contract_args.accounts = Some((
@@ -1507,7 +1516,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
         };
 
         contract_args.program_id = Some(address);
-        self.build_invoke_signed_c(binary, function, payload, payload_len, contract_args, ns);
+        self.build_invoke_signed_c(binary, function, payload[0].into_pointer_value(), payload_len, contract_args, ns);
     }
 
     /// Get return buffer for external call

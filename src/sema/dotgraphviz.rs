@@ -1280,7 +1280,7 @@ impl Dot {
                 );
 
                 self.add_expression(address, func, ns, node, String::from("address"));
-                self.add_expression(args, func, ns, node, String::from("args"));
+                self.add_expression(&args[0], func, ns, node, String::from("args"));
                 self.add_call_args(call_args, func, ns, node);
             }
             Expression::Constructor {

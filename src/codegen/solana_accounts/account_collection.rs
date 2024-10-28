@@ -404,7 +404,10 @@ fn check_instruction(instr: &Instr, data: &mut RecurseData) {
                 }
             }
 
-            payload.recurse(data, check_expression);
+            //payload.recurse(data, check_expression);
+            for item in payload {
+                item.recurse(data, check_expression);
+            }
             value.recurse(data, check_expression);
             gas.recurse(data, check_expression);
             // External calls always need the system account

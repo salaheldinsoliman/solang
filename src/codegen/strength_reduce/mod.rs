@@ -190,7 +190,9 @@ fn block_reduce(
                 if let Some(address) = address {
                     *address = expression_reduce(address, &vars, ns);
                 }
-                *payload = expression_reduce(payload, &vars, ns);
+                for e in payload {
+                    *e = expression_reduce(e, &vars, ns);
+                }
                 *gas = expression_reduce(gas, &vars, ns);
             }
             Instr::ValueTransfer { address, value, .. } => {

@@ -595,7 +595,7 @@ pub(super) fn solana_deploy(
                     ty: metas_ty,
                     var_no: metas,
                 }),
-                payload: instruction,
+                payload: vec![],
                 value: Expression::NumberLiteral {
                     loc: Loc::Codegen,
                     ty: Type::Uint(64),

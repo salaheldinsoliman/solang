@@ -74,6 +74,8 @@ pub enum Type {
     BufferPointer,
     /// The function selector (or discriminator) type is 4 bytes on Polkadot and 8 bytes on Solana
     FunctionSelector,
+
+    Val
 }
 
 #[derive(Eq, Clone, Debug)]
@@ -543,7 +545,7 @@ impl From<&pt::Type> for Type {
     fn from(p: &pt::Type) -> Type {
         match p {
             pt::Type::Bool => Type::Bool,
-            pt::Type::Address => Type::Address(false),
+            pt::Type::Address => {Type::Address(false)},
             pt::Type::AddressPayable => Type::Address(true),
             pt::Type::Payable => Type::Address(true),
             pt::Type::Int(n) => Type::Int(*n),
@@ -1225,7 +1227,7 @@ pub enum Expression {
         loc: pt::Loc,
         ty: CallTy,
         address: Box<Expression>,
-        args: Box<Expression>,
+        args: Vec<Box<Expression>>,
         call_args: CallArgs,
     },
     Constructor {
@@ -1478,7 +1480,10 @@ impl Recurse for Expression {
                     call_args,
                     ..
                 } => {
-                    args.recurse(cx, f);
+                    
+                    for e in args {
+                        e.recurse(cx, f);
+                    }
                     address.recurse(cx, f);
                     call_args.recurse(cx, f);
                 }

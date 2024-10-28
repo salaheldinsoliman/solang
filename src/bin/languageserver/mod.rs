@@ -1204,7 +1204,10 @@ impl<'a> Builder<'a> {
                 call_args,
                 ..
             } => {
-                self.expression(args, symtab);
+                
+                for arg in args {
+                    self.expression(arg, symtab);
+                }
                 self.expression(address, symtab);
                 if let Some(value) = &call_args.value {
                     self.expression(value, symtab);

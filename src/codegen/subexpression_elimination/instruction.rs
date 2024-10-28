@@ -150,7 +150,9 @@ impl<'a, 'b: 'a> AvailableExpressionSet<'a> {
                 if let Some(expr) = seeds {
                     let _ = self.gen_expression(expr, ave, cst);
                 }
-                let _ = self.gen_expression(payload, ave, cst);
+                for expr in payload {
+                    let _ = self.gen_expression(expr, ave, cst);
+                }
                 let _ = self.gen_expression(value, ave, cst);
                 let _ = self.gen_expression(gas, ave, cst);
             }
@@ -411,7 +413,7 @@ impl<'a, 'b: 'a> AvailableExpressionSet<'a> {
                     address: new_address,
                     accounts: new_accounts,
                     seeds: new_seeds,
-                    payload: self.regenerate_expression(payload, ave, cst).1,
+                    payload: payload.to_vec(),
                     value: self.regenerate_expression(value, ave, cst).1,
                     gas: self.regenerate_expression(gas, ave, cst).1,
                     callty: callty.clone(),

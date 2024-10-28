@@ -650,7 +650,7 @@ fn try_namespace(
     func: &pt::Identifier,
     args: &[pt::Expression],
     call_args: &[&pt::NamedArgument],
-    call_args_loc: Option<pt::Loc>,
+    call_args_loc: Option<pt::Loc>, 
     context: &mut ExprContext,
     ns: &mut Namespace,
     symtable: &mut Symtable,
@@ -1290,7 +1290,8 @@ fn try_type_method(
             );
         }
 
-        Type::Address(is_payable) => {
+        Type::Address(_ ) | Type::Val => {
+            let is_payable = false;
             if func.name == "transfer" || func.name == "send" {
                 if ns.target == Target::Solana {
                     diagnostics.push(Diagnostic::error(
@@ -1317,7 +1318,7 @@ fn try_type_method(
                     return Err(());
                 }
 
-                if args.len() != 1 {
+                /*if args.len() != 1 {
                     diagnostics.push(Diagnostic::error(
                         *loc,
                         format!(
@@ -1328,7 +1329,7 @@ fn try_type_method(
                     ));
 
                     return Err(());
-                }
+                }*/
 
                 if let Some(loc) = call_args_loc {
                     diagnostics.push(Diagnostic::error(
@@ -1404,7 +1405,9 @@ fn try_type_method(
                     ));
                 }
 
-                if args.len() != 1 {
+
+                println!("CALL ARGS SEMA: {:?}", args);
+                /*if args.len() != 1 {
                     diagnostics.push(Diagnostic::error(
                         *loc,
                         format!(
@@ -1414,19 +1417,37 @@ fn try_type_method(
                         ),
                     ));
 
+                    println!("RETURNING ERRS");
                     return Err(());
-                }
+                }*/
 
-                let args = expression(
+                
+                /*let args = expression(
                     &args[0],
                     context,
                     ns,
                     symtable,
                     diagnostics,
                     ResolveTo::Type(&Type::DynamicBytes),
-                )?;
+                )?;*/
 
-                let mut args_ty = args.ty();
+                let mut args_vec= Vec::new();
+
+                for arg in args {
+                    let args = Box::new(expression(
+                        arg,
+                        context,
+                        ns,
+                        symtable,
+                        diagnostics,
+                        ResolveTo::Unknown,
+                    )?);
+
+                    args_vec.push(args);
+                }
+
+
+                /*let mut args_ty = args.ty();
 
                 match args_ty.deref_any() {
                     Type::DynamicBytes => (),
@@ -1444,15 +1465,15 @@ fn try_type_method(
                     }
                 }
 
-                let args = args.cast(&args.loc(), args_ty.deref_any(), true, ns, diagnostics)?;
+                let args = args.cast(&args.loc(), args_ty.deref_any(), true, ns, diagnostics)?;*/
 
                 return Ok(Some(Expression::ExternalFunctionCallRaw {
                     loc: *loc,
                     ty,
-                    args: Box::new(args),
+                    args: args_vec,
                     address: Box::new(var_expr.cast(
                         &var_expr.loc(),
-                        &Type::Address(*is_payable),
+                        &Type::Address(is_payable),
                         true,
                         ns,
                         diagnostics,
@@ -1648,6 +1669,7 @@ pub(super) fn method_call_pos_args(
         }
     }
 
+    println!("INSIDE METHOD CALL POS ARGS");
     match diagnostics_type {
         1 => diagnostics.extend(type_method_diagnostics),
         2 => diagnostics.extend(resolve_using_diagnostics),
@@ -1884,6 +1906,7 @@ pub(super) fn method_call_named_args(
         );
     }
 
+    println!("INSIDE METHOD CALL NAMED ARGS");
     diagnostics.push(Diagnostic::error(
         func_name.loc,
         format!("method '{}' does not exist", func_name.name),

@@ -89,6 +89,7 @@ impl Converter<'_> {
             ast::Type::Void => unreachable!(),
             ast::Type::Unreachable => unreachable!(),
             ast::Type::Unresolved => unreachable!(),
+            ast::Type::Val => Type::Uint(64),
         }
     }
 

@@ -4,7 +4,7 @@ use crate::codegen::cfg::HashTy;
 use crate::codegen::Expression;
 use crate::emit::binary::Binary;
 use crate::emit::soroban::{
-    SorobanTarget, GET_CONTRACT_DATA, LOG_FROM_LINEAR_MEMORY, PUT_CONTRACT_DATA,
+    SorobanTarget, GET_CONTRACT_DATA, LOG_FROM_LINEAR_MEMORY, PUT_CONTRACT_DATA, SYMBOL_NEW_FROM_LINEAR_MEMORY, VECTOR_NEW, CALL
 };
 use crate::emit::ContractArgs;
 use crate::emit::{TargetRuntime, Variable};
@@ -348,15 +348,90 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         bin: &Binary<'b>,
         function: FunctionValue<'b>,
         success: Option<&mut BasicValueEnum<'b>>,
-        payload: PointerValue<'b>,
+        payload: Vec<BasicValueEnum<'b>>,
         payload_len: IntValue<'b>,
-        address: Option<PointerValue<'b>>,
+        address: Option<BasicValueEnum<'b>>,
         contract_args: ContractArgs<'b>,
         ty: CallTy,
         ns: &Namespace,
         loc: Loc,
     ) {
-        unimplemented!()
+
+        let eight = bin.context.i64_type().const_int(8, false);
+        let four = bin.context.i64_type().const_int(4, false);
+        let zero = bin.context.i64_type().const_int(0, false);
+        let thirty_two = bin.context.i64_type().const_int(32, false);
+
+        println!("External call!!!!");
+        let callee_name = bin.vector_bytes(payload[0]);
+
+        let callee_pos = bin
+                .builder
+                .build_ptr_to_int(callee_name, bin.context.i64_type(), "msg_pos")
+                .unwrap().const_cast(bin.context.i64_type(), false);
+        
+                let callee_pos_encoded = bin
+                .builder
+                .build_left_shift(callee_pos, thirty_two, "temp")
+                .unwrap();
+            let callee_pos_encoded = bin
+                .builder
+                .build_int_add(callee_pos_encoded, four, "callee_pos_encoded")
+                .unwrap();
+
+        println!("Callee name: {:?}", callee_name);
+
+        let callee_len = bin.vector_len(payload[0]).const_cast(bin.context.i64_type(), false);
+
+        let callee_len_encoded = bin
+        .builder
+        .build_left_shift(callee_len, thirty_two, "temp")
+        .unwrap();
+
+        let callee_len_encoded = bin
+                .builder
+                .build_int_add(callee_len_encoded, four, "callee_pos_encoded")
+                .unwrap();
+
+        println!("Callee len: {:?}", callee_len);
+
+
+        let symbol = bin
+        .builder
+        .build_call(
+            bin.module.get_function(SYMBOL_NEW_FROM_LINEAR_MEMORY).unwrap(),
+            &[
+                callee_pos_encoded.into(),
+                callee_len_encoded.into()
+            ],
+            "symbol",
+        )
+        .unwrap().try_as_basic_value().left().unwrap().into_int_value();
+
+
+
+        let vec_object = bin.builder.build_call(
+            bin.module.get_function(VECTOR_NEW).unwrap(),
+            &[
+            ],
+            "vec_object",
+        ).unwrap().try_as_basic_value().left().unwrap().into_int_value();
+
+
+
+        let call_res = bin.builder.build_call(
+            bin.module.get_function(CALL).unwrap(),
+            &[
+                address.unwrap().into(),
+                symbol.into(),
+                vec_object.into(),
+            ],
+            "call",
+        ).unwrap();
+
+
+
+
     }
 
     /// send value to address
@@ -387,7 +462,10 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
     /// Return the return data from an external call (either revert error or return values)
     fn return_data<'b>(&self, bin: &Binary<'b>, function: FunctionValue<'b>) -> PointerValue<'b> {
-        unimplemented!()
+
+        println!("Return data!!!!");
+        bin.context.i8_type().ptr_type(inkwell::AddressSpace::default()).const_null()
+        //unimplemented!()
     }
 
     /// Return the value we received

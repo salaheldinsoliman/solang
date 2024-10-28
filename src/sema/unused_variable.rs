@@ -225,7 +225,10 @@ pub fn check_function_call(ns: &mut Namespace, exp: &Expression, symtable: &mut 
             call_args,
             ..
         } => {
-            used_variable(ns, args, symtable);
+            //used_variable(ns, args, symtable);
+            for arg in args {
+                used_variable(ns, arg, symtable);
+            }
             used_variable(ns, address, symtable);
             check_call_args(ns, call_args, symtable);
         }

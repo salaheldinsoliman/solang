@@ -23,6 +23,9 @@ const SOROBAN_ENV_INTERFACE_VERSION: u64 = 90194313216;
 pub const PUT_CONTRACT_DATA: &str = "l._";
 pub const GET_CONTRACT_DATA: &str = "l.1";
 pub const LOG_FROM_LINEAR_MEMORY: &str = "x._";
+pub const SYMBOL_NEW_FROM_LINEAR_MEMORY: &str = "b.j";
+pub const VECTOR_NEW: &str = "v._";
+pub const CALL: &str = "d._";
 
 pub struct SorobanTarget;
 
@@ -89,7 +92,6 @@ impl SorobanTarget {
             // If there are duplicate function names, then the function name in the source is mangled to include the signature.
 
             // if func is a default constructor, then the function name is the contract name
-
             let linkage = if cfg.public {
                 let name = if cfg.name.contains("::") {
                     // get the third part of the name which is the function name
@@ -97,7 +99,8 @@ impl SorobanTarget {
                 } else {
                     &cfg.name
                 };
-                Self::emit_function_spec_entry(context, cfg, name.to_string(), binary);
+
+                Self::emit_function_spec_entry(context, cfg, name.to_string(), binary, &ns);
                 export_list.push(name);
                 Linkage::External
             } else {
@@ -143,15 +146,25 @@ impl SorobanTarget {
         cfg: &ControlFlowGraph,
         name: String,
         binary: &mut Binary<'a>,
-    ) {
+        ns: &'a ast::Namespace
+    ) { 
+
+        println!("cfg {:?}", cfg.name);
+        let function = match &cfg.function_no {
+            ASTFunction::SolidityFunction(no) => &ns.functions[*no],
+            _ => return,
+        };
+
         if cfg.public && !cfg.is_placeholder() {
+            
+
             // TODO: Emit custom type spec entries
             let mut spec = DepthLimitedWrite::new(Vec::new(), 10);
             ScSpecEntry::FunctionV0(ScSpecFunctionV0 {
                 name: name
                     .try_into()
                     .unwrap_or_else(|_| panic!("function name {:?} exceeds limit", cfg.name)),
-                inputs: cfg
+                inputs: function
                     .params
                     .iter()
                     .enumerate()
@@ -163,13 +176,23 @@ impl SorobanTarget {
                             .unwrap_or_else(|| i.to_string())
                             .try_into()
                             .expect("function input name exceeds limit"),
-                        type_: ScSpecTypeDef::U64, // TODO: Map type.
+                        type_: match p.ty {
+                            ast::Type::Uint(32) => ScSpecTypeDef::U32,
+                            ast::Type::Uint(64) => ScSpecTypeDef::U64,
+                            ast::Type::Int(_) => ScSpecTypeDef::I32,
+                            ast::Type::Bool => ScSpecTypeDef::Bool,
+                            ast::Type::Address(_) => ScSpecTypeDef::Address,
+                            ast::Type::Bytes(_) => ScSpecTypeDef::Bytes,
+                            ast::Type::String => ScSpecTypeDef::String,
+                            ast::Type::Val => ScSpecTypeDef::Address,
+                            _ => panic!("unsupported input type {:?}", p.ty),
+                        }, // TODO: Map type.
                         doc: StringM::default(),   // TODO: Add doc.
                     })
                     .collect::<Vec<_>>()
                     .try_into()
                     .expect("function input count exceeds limit"),
-                outputs: cfg
+                outputs: function
                     .returns
                     .iter()
                     .map(|return_type| {
@@ -237,6 +260,9 @@ impl SorobanTarget {
             .i64_type()
             .fn_type(&[ty.into(), ty.into(), ty.into(), ty.into()], false);
 
+        let no_args = binary.context.i64_type().fn_type(&[], false);
+
+
         binary
             .module
             .add_function(PUT_CONTRACT_DATA, function_ty_1, Some(Linkage::External));
@@ -249,16 +275,28 @@ impl SorobanTarget {
             log_function_ty,
             Some(Linkage::External),
         );
+
+        binary.module.add_function(
+            SYMBOL_NEW_FROM_LINEAR_MEMORY,
+            function_ty,
+            Some(Linkage::External),
+        );
+
+        binary
+            .module
+            .add_function(VECTOR_NEW, no_args, Some(Linkage::External));
+
+        binary.module.add_function(CALL, function_ty_1, Some(Linkage::External));
     }
 
-    fn emit_initializer(binary: &mut Binary, _ns: &ast::Namespace) {
+    fn emit_initializer<'a>(binary: & mut Binary<'a>, ns: &'a ast::Namespace) {
         let mut cfg = ControlFlowGraph::new("init".to_string(), ASTFunction::None);
 
         cfg.public = true;
         let void_param = ast::Parameter::new_default(ast::Type::Void);
         cfg.returns = sync::Arc::new(vec![void_param]);
 
-        Self::emit_function_spec_entry(binary.context, &cfg, "init".to_string(), binary);
+        Self::emit_function_spec_entry(binary.context, &cfg, "init".to_string(), binary, ns);
 
         let function_name = CString::new(STORAGE_INITIALIZER).unwrap();
         let mut storage_initializers = binary

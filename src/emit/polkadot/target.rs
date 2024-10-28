@@ -925,14 +925,26 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
         binary: &Binary<'b>,
         function: FunctionValue<'b>,
         success: Option<&mut BasicValueEnum<'b>>,
-        payload: PointerValue<'b>,
+        payload: Vec<BasicValueEnum<'b>>,
         payload_len: IntValue<'b>,
-        address: Option<PointerValue<'b>>,
+        address: Option<BasicValueEnum<'b>>,
         contract_args: ContractArgs<'b>,
         call_type: ast::CallTy,
         ns: &ast::Namespace,
         loc: Loc,
     ) {
+        
+        let address = binary.build_array_alloca(
+            function,
+            binary.context.i8_type(),
+            binary.context
+                .i32_type()
+                .const_int(ns.address_length as u64, false),
+            "address",
+        );
+
+        binary.builder.build_store(address, address).unwrap();
+
         emit_context!(binary);
 
         let (scratch_buf, scratch_len) = scratch_buf!();
@@ -956,10 +968,10 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
                     "seal_call",
                     &[
                         contract_args.flags.unwrap_or(i32_zero!()).into(),
-                        address.unwrap().into(),
+                        address.into(),
                         contract_args.gas.unwrap().into(),
                         value_ptr.into(),
-                        payload.into(),
+                        payload[0].into(),
                         payload_len.into(),
                         scratch_buf.into(),
                         scratch_len.into(),
@@ -989,7 +1001,7 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
                 let code_hash_ret = call!(
                     "code_hash",
                     &[
-                        address.unwrap().into(),
+                        address.into(),
                         code_hash_out_ptr.into(),
                         code_hash_out_len_ptr.into(),
                     ]
@@ -1035,7 +1047,7 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
                     &[
                         contract_args.flags.unwrap_or(i32_zero!()).into(),
                         code_hash_out_ptr.into(),
-                        payload.into(),
+                        payload[0].into(),
                         payload_len.into(),
                         scratch_buf.into(),
                         scratch_len.into(),

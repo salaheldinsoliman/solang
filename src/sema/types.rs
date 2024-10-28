@@ -1303,6 +1303,7 @@ impl Type {
             Type::Unresolved => "unresolved".into(),
             Type::BufferPointer => "buffer_pointer".into(),
             Type::FunctionSelector => "function_selector".into(),
+            Type::Val => "val".into(),
         }
     }
 
@@ -1368,6 +1369,7 @@ impl Type {
             // TODO: should an unresolved type not match another unresolved type?
             Type::Unresolved => "unresolved".to_owned(),
             Type::Slice(ty) => format!("{} slice", ty.to_string(ns)),
+            Type::Val => "unresolved".to_owned(),
             _ => unreachable!(),
         }
     }
@@ -2111,6 +2113,7 @@ impl Type {
             Type::StorageRef(_, r) => r.to_llvm_string(ns),
             Type::UserType(no) => ns.user_types[*no].ty.to_llvm_string(ns),
             Type::Slice(ty) => format!("slice:{}", ty.to_llvm_string(ns)),
+            Type::Val => "val".to_owned(),
             _ => unreachable!(),
         }
     }
