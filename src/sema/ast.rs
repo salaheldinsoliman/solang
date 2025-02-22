@@ -1781,6 +1781,8 @@ pub enum Builtin {
     TypeCreatorCode,
     RequireAuth,
     AuthAsCurrContract,
+    ExtendTtl,
+    ExtendInstanceTtl,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug)]
