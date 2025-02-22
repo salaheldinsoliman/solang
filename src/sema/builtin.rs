@@ -37,7 +37,7 @@ pub struct Prototype {
 }
 
 // A list of all Solidity builtins functions
-pub static BUILTIN_FUNCTIONS: Lazy<[Prototype; 28]> = Lazy::new(|| {
+pub static BUILTIN_FUNCTIONS: Lazy<[Prototype; 29]> = Lazy::new(|| {
     [
         Prototype {
             builtin: Builtin::ExtendInstanceTtl,
@@ -570,7 +570,7 @@ pub static BUILTIN_VARIABLE: Lazy<[Prototype; 17]> = Lazy::new(|| {
 });
 
 // A list of all Solidity builtins methods
-pub static BUILTIN_METHODS: Lazy<[Prototype; 28]> = Lazy::new(|| {
+pub static BUILTIN_METHODS: Lazy<[Prototype; 29]> = Lazy::new(|| {
     [
         Prototype {
             builtin: Builtin::ExtendTtl,

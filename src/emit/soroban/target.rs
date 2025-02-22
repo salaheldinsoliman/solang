@@ -67,6 +67,9 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         .unwrap()
         .into_int_value();
 
+        
+        let ret = decode_value(ret, 8, binary);
+
         ret.into()
     }
 
@@ -91,6 +94,8 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
             .get_function(HostFunctions::PutContractData.name())
             .unwrap();
 
+        let dest_encoded = encode_value(dest.into_int_value(), 8, 6, binary);
+
         let value = binary
             .builder
             .build_call(
@@ -100,7 +105,7 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
                         .into_int_value()
                         .const_cast(binary.context.i64_type(), false)
                         .into(),
-                    dest.into(),
+                    dest_encoded.into(),
                     binary
                         .context
                         .i64_type()
@@ -690,4 +695,17 @@ fn encode_value<'a>(value: IntValue<'a>, shift: u64, add: u64, bin: &'a Binary) 
             "encoded",
         )
         .unwrap()
+}
+
+fn decode_value<'a, 'b>(value: IntValue<'a>, shift: u64, bin: &'b Binary<'a>) -> IntValue<'a> {
+    let shifted = bin
+        .builder
+        .build_right_shift(
+            value,
+            bin.context.i64_type().const_int(shift, false),
+            false,
+            "temp",
+        )
+        .unwrap();
+    shifted
 }
