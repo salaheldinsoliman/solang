@@ -2154,7 +2154,7 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             let data = bin.vector_bytes(ptr);
             let res = bin
                 .builder
-                .build_ptr_to_int(data, bin.context.i64_type(), "sesa");
+                .build_ptr_to_int(data, bin.context.i32_type(), "sesa");
 
             res.unwrap().into()
         }

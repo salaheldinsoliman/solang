@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use super::encoding::{abi_decode, abi_encode};
+use super::encoding::{abi_decode, abi_encode, soroban_encoding::soroban_encode};
 use super::revert::{
     assert_failure, expr_assert, log_runtime_error, require, PanicCode, SolidityError,
 };
@@ -16,7 +16,7 @@ use crate::codegen::array_boundary::handle_array_assign;
 use crate::codegen::constructor::call_constructor;
 use crate::codegen::events::new_event_emitter;
 use crate::codegen::unused_variable::should_remove_assignment;
-use crate::codegen::{Builtin, Expression};
+use crate::codegen::{Builtin, Expression, HostFunctions};
 use crate::sema::ast::ExternalCallAccounts;
 use crate::sema::{
     ast,
@@ -30,6 +30,7 @@ use crate::sema::{
     expression::ResolveTo,
 };
 use crate::Target;
+use anchor_syn::Ty;
 use num_bigint::{BigInt, Sign};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use solang_parser::pt::{self, CodeLocation, Loc};
@@ -2327,6 +2328,817 @@ fn expr_builtin(
 
             code(loc, *contract_no, ns, opt)
         }
+        ast::Builtin::RequireAuth => {
+            let var_temp = vartab.temp(
+                &pt::Identifier {
+                    name: "auth".to_owned(),
+                    loc: *loc,
+                },
+                &Type::Bool,
+            );
+
+            let var = Expression::Variable {
+                loc: *loc,
+                ty: Type::Address(false),
+                var_no: var_temp,
+            };
+            println!("var {:?}", args[0]);
+            let expr = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+            println!("expr {:?}", expr);
+            let instr = Instr::Call {
+                res: vec![var_temp],
+                return_tys: vec![Type::Void],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::RequireAuth.name().to_string(),
+                },
+                args: vec![expr],
+            };
+
+            cfg.add(vartab, instr);
+
+            var
+        }
+
+        ast::Builtin::AuthAsCurrContract => {
+            for arg in args {
+                println!("arg {:?}", arg);
+            }
+
+            /*const DATA: &[u8] = b"ContractCreateContractHostFnCreateContractWithCtorHostFnargscontractfn_name\\x08\x00\x10\x00\x04\x00\x00\x00<\x00\x10\x00\x08\x00\x00\x00D\x00\x10\x00\x07\x00\x00\x00\
+            executablesalt\x00\x00d\x00\x10\x00\x0a\x00\x00\x00n\x00\x10\x00\x04\x00\x00\x00\
+            constructor_args\x84\x00\x10\x00\x10\x00\x00\x00d\x00\x10\x00\x0a\x00\x00\x00\
+            n\x00\x10\x00\x04\x00\x00\x00Wasmcontextsub_invocations\x00\x00\xb0\x00\x10\x00\x07\x00\x00\x00\
+            \xb7\x00\x10\x00\x0f\x00\x00\x00";*/
+
+            //const DATA: &[u8] = b"Contractargscontractfn_name\00\08\00\10\00\04\00\00\00\0c\00\10\00\08\00\00\00\14\00\10\00\07\00\00\00contextsub_invocations\00\004\00\10\00\07\00\00\00;\00\10\00\0f\00\00\00";
+
+            /*
+            let keys = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: DATA.to_vec(),
+            };
+
+
+            let pos = Expression::VectorData { pointer: Box::new(keys.clone()) };
+
+            let pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+
+            let pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+
+
+
+
+            let  map_var_no = vartab.temp_anonymous(&Type::Uint(64));
+
+            let map = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: map_var_no,
+            };
+
+            let arg_1 = Expression::NumberLiteral {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                value: BigInt::from(1),
+            };
+
+            let arg_2 = Expression::NumberLiteral {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                value: BigInt::from(2),
+            };
+
+
+
+            let val_1 = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+
+
+
+            let val_2_pre = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
+
+
+            let val_2  = if let Expression::BytesLiteral { loc, ty, value } =  val_2_pre{
+
+                Expression::BytesLiteral { loc,ty: Type::String, value }
+
+            } else {
+                unreachable!()
+            };
+
+
+
+            let val_args = vartab.temp_anonymous(&Type::Uint(64));
+            let val_args_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: val_args,
+            };
+
+            let vec_new_args = Instr::Call {
+                res: vec![val_args],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction { name: HostFunctions::VectorNew.name().to_string() },
+                args: vec![],
+            };
+
+            cfg.add(vartab, vec_new_args);
+
+
+
+            let all_vals = vec![val_1, val_2, val_args_var.clone(), val_args_var];
+
+            //encode
+            let encoded = abi_encode(loc, all_vals, ns, vartab, cfg, false);
+
+            println!("encoded {:?}", encoded);
+
+
+            let vals_pos = Expression::VectorData { pointer: Box::new(encoded.0) };
+            let vals_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(vals_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let vals_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(vals_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            let len = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) };
+            let len_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let len_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };*/
+
+            /*let  map_var_no = vartab.temp_anonymous(&Type::Uint(64));
+
+            let map = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: map_var_no,
+            };
+
+            let key = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "contract".as_bytes().to_vec() };
+
+            let key_var = vartab.temp_anonymous(&Type::Bytes(8));
+            let key_var_expr = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Bytes(8),
+                var_no: key_var,
+            };
+            let instr = Instr::Set {
+                loc: Loc::Codegen,
+                res: key_var,
+                expr: key,
+            };
+
+            cfg.add(vartab, instr);
+
+
+
+            let pos = Expression::VectorData { pointer: Box::new(key_var_expr.clone()) };
+            let pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let key_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+
+
+
+            let value = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+            let value_temp = vartab.temp_anonymous(&Type::Bytes(8));
+            let value_temp_expr = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: value.ty(),
+                var_no: value_temp,
+            };
+            let instr = Instr::Set {
+                loc: Loc::Codegen,
+                res: value_temp,
+                expr: value,
+            };
+
+            cfg.add(vartab, instr);
+
+
+
+
+            let value_encode = abi_encode(loc, vec![value_temp_expr], ns, vartab, cfg, false).0;
+            let value_pos = Expression::VectorData { pointer: Box::new(value_encode) };
+            let value_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(value_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let value_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(value_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            let len = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(1) };
+            let len_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let len_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+            */
+
+            /*let key = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(1) };
+            let encode_key = abi_encode(loc, vec![key], ns, vartab, cfg, false).0;*/
+
+            //
+
+            /*let key_1 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "contract".as_bytes().to_vec() };
+            let key_2 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "fn_name".as_bytes().to_vec() };
+            let key_3 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "args".as_bytes().to_vec() };
+            let key_4 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "sub_invocations".as_bytes().to_vec() };
+
+
+            let encoded = abi_encode(loc, vec![key_1, key_2, key_3, key_4], ns, vartab, cfg, false).0;
+
+            let key_pos = Expression::VectorData { pointer: Box::new(encoded) };
+            let key_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let key_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };*/
+
+            /*  let key_1_buf = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "contract".as_bytes().to_vec() };
+            let key_2_buf = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "fn_namee".as_bytes().to_vec() };
+
+
+            let key_1_var = vartab.temp_anonymous(&Type::Bytes(8));
+            let key_2_var = vartab.temp_anonymous(&Type::Bytes(8));
+
+
+            let key_2 = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Bytes(8),
+                var_no: key_2_var,
+            };
+            let key_1 = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Bytes(8),
+                var_no: key_1_var,
+            };
+            let instr = Instr::Set {
+                loc: Loc::Codegen,
+                res: key_1_var,
+                expr: key_1_buf,
+            };
+            cfg.add(vartab, instr);
+
+            let instr_2 = Instr::Set {
+                loc: Loc::Codegen,
+                res: key_2_var,
+                expr: key_2_buf,
+            };
+
+            cfg.add(vartab, instr_2);
+            */
+
+            /*let key_1 = Expression::AllocDynamicBytes { loc: Loc::Codegen, ty: Type::Bytes(8), initializer: None, size: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8) }) };
+            let temp_var_no = vartab.temp_anonymous(&Type::Bytes(8));
+            let temp_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Bytes(8),
+                var_no: temp_var_no,
+            };
+
+            let instr = Instr::Set {
+                loc: Loc::Codegen,
+                res: temp_var_no,
+                expr: key_1.clone(),
+            };
+
+            cfg.add(vartab, instr);
+
+            let write_buf = Instr::WriteBuffer { buf: key_1.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::zero() }, value: key_1_buf };
+
+            cfg.add(vartab, write_buf);*/
+
+            //let key_1_pos = Expression::VectorData { pointer: Box::new(key_1.clone()) };
+            //let key_2_pos = Expression::VectorData { pointer: Box::new(key_2.clone()) };
+            //let key_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            //let key_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            // let key_with_length = Expression::AllocDynamicBytes { loc: Loc::Codegen, ty: Type::Bytes(8 + 8), initializer: None, size: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8 + 8) }) };
+            // let temp_var_no_2 = vartab.temp_anonymous(&Type::Bytes(8 + 8));
+            // let temp_var_2 = Expression::Variable {
+            //     loc: Loc::Codegen,
+            //     ty: Type::Bytes(8 + 8),
+            //     var_no: temp_var_no_2,
+            // };
+
+            // let instr_2 = Instr::Set {
+            //     loc: Loc::Codegen,
+            //     res: temp_var_no_2,
+            //     expr: key_with_length.clone(),
+            // };
+
+            // cfg.add(vartab, instr_2);
+
+            // let write_buf_2 = Instr::WriteBuffer { buf: key_with_length.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::zero() }, value: key_1_pos };
+
+            // cfg.add(vartab, write_buf_2);
+
+            // let write_length = Instr::WriteBuffer { buf: key_with_length.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }, value: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8) } };
+
+            // cfg.add(vartab, write_length);
+
+            // let write_buf_3 = Instr::WriteBuffer { buf: key_with_length.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8) }, value: key_2_pos };
+
+            // cfg.add(vartab, write_buf_3);
+
+            // let write_length_2 = Instr::WriteBuffer { buf: key_with_length.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8 + 4) }, value: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8) } };
+
+            // cfg.add(vartab, write_length_2);
+
+            // let key_pos = Expression::VectorData { pointer: Box::new(temp_var_2.clone()) };
+
+            // let key_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            // let key_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(key_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            // let value = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+            // let encode = abi_encode(loc, vec![value.clone(), value.clone()], ns, vartab, cfg, false).0;
+            // let value_pos = Expression::VectorData { pointer: Box::new(encode) };
+            // let value_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(value_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            // let value_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(value_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            // let len = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(2) };
+            // let len_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            // let len_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(len_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            // let new_map = Instr::Call { res: vec![map_var_no], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::MapNewFromLinearMemory.name().to_string() }, args: vec![key_pos_added.clone(), value_pos_added, len_added.clone()] };
+
+            // //write to mem
+            // cfg.add(vartab, new_map);
+
+            // let buf_2 = Expression::AllocDynamicBytes { loc: Loc::Codegen, ty: Type::Bytes(8), initializer: None, size: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(8) }) };
+            // let temp_var_no_2 = vartab.temp_anonymous(&Type::Bytes(8));
+            // let temp_var_2 = Expression::Variable {
+            //     loc: Loc::Codegen,
+            //     ty: Type::Bytes(8),
+            //     var_no: temp_var_no_2,
+            // };
+
+            // let instr_2 = Instr::Set {
+            //     loc: Loc::Codegen,
+            //     res: temp_var_no_2,
+            //     expr: buf_2.clone(),
+            // };
+
+            // cfg.add(vartab, instr_2);
+
+            // let write_buf_2 = Instr::WriteBuffer { buf: buf_2.clone(), offset: Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::zero() }, value: map.clone() };
+
+            // cfg.add(vartab, write_buf_2);
+
+            // let map_pos = Expression::VectorData { pointer: Box::new(temp_var_2.clone()) };
+            // let map_pos_shifted = Expression::ShiftLeft {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(map_pos.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            // let map_pos_added = Expression::Add {loc: Loc::Codegen,ty:Type::Uint(64),  left: Box::new(map_pos_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            /*
+
+
+            let vec_new = vartab.temp_anonymous(&Type::Uint(64));
+            let vec_new_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: vec_new,
+            };
+
+            let vec_new_linear_em = Instr::Call {
+                res: vec![vec_new],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction { name: HostFunctions::VectorNewFromLinearMemory.name().to_string() },
+                args: vec![map_pos_added,
+
+                len_added
+                ],
+            };
+
+
+            cfg.add(vartab, vec_new_linear_em);
+             */
+
+            /*let call_res = vartab.temp_anonymous(&Type::Uint(64));
+            let call_res_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: call_res,
+            };
+
+
+            let auth_call = Instr::Call { res: vec![call_res], return_tys: vec![Type::Void], call: InternalCallTy::HostFunction { name: HostFunctions::AuthAsCurrContract.name().to_string() }, args: vec![vec_new_var] };
+
+
+            cfg.add(vartab, auth_call);*/
+
+            //call_res_var
+
+            //vec_new_var
+
+            /*let  map_var_no = vartab.temp_anonymous(&Type::Uint(64));
+
+            let map = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: map_var_no,
+            };
+
+            let map_new = Instr::Call {
+                res: vec![map_var_no],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction { name: HostFunctions::MapNew.name().to_string() },
+                args: vec![],
+            };
+
+            cfg.add(vartab, map_new);
+
+            let key_1 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "contract".as_bytes().to_vec() };
+            let key_2 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "fn_name".as_bytes().to_vec() };
+            let key_3 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "args".as_bytes().to_vec() };
+            let key_4 = Expression::BytesLiteral { loc: Loc::Codegen, ty: Type::String, value: "sub_invocations".as_bytes().to_vec() };
+
+            let keys = abi_encode(loc, vec![key_1, key_2, key_3, key_4], ns, vartab, cfg, false).0;
+
+
+            let key_1_ptr = Expression::VectorData { pointer: Box::new(keys.clone()) };
+
+
+            let key_load = Expression::Load { loc: Loc::Codegen, ty: Type::Uint(64), expr: Box::new(key_1_ptr.clone()) };
+
+
+
+            let key_2_load = Expression::Load { loc: Loc::Codegen, ty: Type::Uint(64), expr: Box::new(Expression::Add { loc: Loc::Codegen, ty: Type::Uint(32), overflowing: false, left: Box::new(key_1_ptr.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(32), value: BigInt::from(4) }) }) };
+
+
+
+            let key_3_load = Expression::Load { loc: Loc::Codegen, ty: Type::Uint(64), expr: Box::new(Expression::Add { loc: Loc::Codegen, ty: Type::Uint(32), overflowing: false, left: Box::new(key_1_ptr.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(32), value: BigInt::from(8) }) }) };
+
+
+            let key_4_load = Expression::Load { loc: Loc::Codegen, ty: Type::Uint(64), expr: Box::new(Expression::Add { loc: Loc::Codegen, ty: Type::Uint(32), overflowing: false, left: Box::new(key_1_ptr.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(32), value: BigInt::from(12) }) }) };
+
+
+
+
+
+
+
+            let value_1 = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+            let value_2_var_no = vartab.temp_anonymous(&Type::Uint(64));
+            let value_2_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: value_2_var_no,
+            };
+
+            let vec_new = Instr::Call {
+                res: vec![value_2_var_no],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction { name: HostFunctions::VectorNew.name().to_string() },
+                args: vec![],
+            };
+            cfg.add(vartab, vec_new);
+
+
+
+
+
+            let map_put = Instr::Call { res: vec![map_var_no], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::MapPut.name().to_string() }, args: vec![map.clone(), key_load.clone(), value_1.clone()] };
+            let map_put_2 = Instr::Call { res: vec![map_var_no], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::MapPut.name().to_string() }, args: vec![map.clone(), key_2_load.clone(), key_load.clone()] };
+            let map_put_3 = Instr::Call { res: vec![map_var_no], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::MapPut.name().to_string() }, args: vec![map.clone(), key_3_load.clone(), value_2_var.clone()] };
+            let map_put_4 = Instr::Call { res: vec![map_var_no], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::MapPut.name().to_string() }, args: vec![map.clone(), key_4_load.clone(), value_2_var.clone()] };
+
+
+
+            cfg.add(vartab, map_put);
+            cfg.add(vartab, map_put_2);
+            cfg.add(vartab, map_put_3);
+            cfg.add(vartab, map_put_4);
+
+            map*/
+
+            // forming the map object "contract,fn_name, args" which is called "context"
+
+            let symbol_key_1 = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "contract".as_bytes().to_vec(),
+            };
+            let symbol_key_2 = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "fn_name".as_bytes().to_vec(),
+            };
+            let symbol_key_3 = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "args".as_bytes().to_vec(),
+            };
+
+            let symbols = soroban_encode(
+                loc,
+                vec![symbol_key_1, symbol_key_2, symbol_key_3],
+                ns,
+                vartab,
+                cfg,
+                false,
+            )
+            .2;
+
+            println!("symbols {:?}", symbols);
+
+
+            let contract_value = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+            let fn_name_symbol = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
+            
+            let symbol_string = if let Expression::BytesLiteral { loc, ty, value } = fn_name_symbol {
+                Expression::BytesLiteral { loc, ty: Type::String, value }
+            }
+            else {
+                unreachable!()
+            };
+            let encode_func_symbol = soroban_encode(loc, vec![symbol_string], ns, vartab, cfg, false).2[0].clone();
+
+            ///////////////////////////////////PREPARE ARGS FOR CONTEXT MAP////////////////////////////////////
+            
+            let mut args_vec = Vec::new();
+            for i in 2..args.len() {
+                let arg = expression(&args[i], cfg, contract_no, func, ns, vartab, opt);
+                args_vec.push(arg);
+            }
+
+
+            let args_encoded = abi_encode(loc, args_vec.clone(), ns, vartab, cfg, false);
+
+            let args_buf = args_encoded.0;
+
+            let args_buf_ptr = Expression::VectorData { pointer: Box::new(args_buf.clone()) };
+
+            let args_buf_extended = Expression::ZeroExt { loc: Loc::Codegen, ty: Type::Uint(64), expr: Box::new(args_buf_ptr.clone()) };
+
+            let args_buf_shifted = Expression::ShiftLeft { loc: Loc::Codegen, ty: Type::Uint(64), left: Box::new(args_buf_extended.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+
+            let args_buf_pos = Expression::Add { loc: Loc::Codegen, ty: Type::Uint(64), left: Box::new(args_buf_shifted.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+
+            let args_len = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(args_vec.len()) };
+            let args_len_encoded = Expression::ShiftLeft { loc: Loc::Codegen, ty: Type::Uint(64), left: Box::new(args_len.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(32) }) };
+            let args_len_encoded = Expression::Add { loc: Loc::Codegen, ty: Type::Uint(64), left: Box::new(args_len_encoded.clone()), right: Box::new(Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(64), value: BigInt::from(4) }), overflowing: false };
+
+            println!("args_len_encoded {:?}", args_len_encoded);
+
+
+            let args_vec_var_no = vartab.temp_anonymous(&Type::Uint(64));
+            let args_vec_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: args_vec_var_no,
+            };
+
+            let vec_new_from_linear_mem = Instr::Call {
+                res: vec![args_vec_var_no],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VectorNewFromLinearMemory.name().to_string(),
+                },
+                args: vec![args_buf_pos.clone(),  args_len_encoded],
+            };
+
+            cfg.add(vartab, vec_new_from_linear_mem);
+
+
+
+
+
+
+
+            let context_map = vartab.temp_anonymous(&Type::Uint(64));
+            let context_map_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: context_map,
+            };
+
+            let context_map_new = Instr::Call {
+                res: vec![context_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapNew.name().to_string(),
+                },
+                args: vec![],
+            };
+
+            cfg.add(vartab, context_map_new);
+
+            let context_map_put = Instr::Call {
+                res: vec![context_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapPut.name().to_string(),
+                },
+                args: vec![context_map_var.clone(), symbols[0].clone(), contract_value],
+            };
+
+            cfg.add(vartab, context_map_put);
+
+            let context_map_put_2 = Instr::Call {
+                res: vec![context_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapPut.name().to_string(),
+                },
+                args: vec![context_map_var.clone(), symbols[1].clone(), encode_func_symbol],
+            };
+
+            cfg.add(vartab, context_map_put_2);
+
+            let context_map_put_3 = Instr::Call {
+                res: vec![context_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapPut.name().to_string(),
+                },
+                args: vec![context_map_var.clone(), symbols[2].clone(), args_vec_var.clone()],
+            };
+
+            cfg.add(vartab, context_map_put_3);
+
+
+
+            ///////////////////////////////////////////////////////////////////////////////////
+            
+            // now forming "sub invocations" map
+
+            let key_1 = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "context".as_bytes().to_vec(),
+            };
+
+            let key_2 = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "sub_invocations".as_bytes().to_vec(),
+            };
+
+            let keys = soroban_encode(loc, vec![key_1, key_2], ns, vartab, cfg, false).2;
+
+            let sub_invocations_map = vartab.temp_anonymous(&Type::Uint(64));
+            let sub_invocations_map_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: sub_invocations_map,
+            };
+
+            let sub_invocations_map_new = Instr::Call {
+                res: vec![sub_invocations_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapNew.name().to_string(),
+                },
+                args: vec![],
+            };
+
+            cfg.add(vartab, sub_invocations_map_new);
+
+            let sub_invocations_map_put = Instr::Call {
+                res: vec![sub_invocations_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapPut.name().to_string(),
+                },
+                args: vec![sub_invocations_map_var.clone(), keys[0].clone(), context_map_var],
+            };
+
+            cfg.add(vartab, sub_invocations_map_put);
+
+
+            let empy_vec_var = vartab.temp_anonymous(&Type::Uint(64));
+            let empty_vec_expr = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: empy_vec_var,
+            };
+            let empty_vec = Instr::Call { res: vec![empy_vec_var], return_tys: vec![Type::Uint(64)], call: InternalCallTy::HostFunction { name: HostFunctions::VectorNew.name().to_string() }, args: vec![] };
+
+            cfg.add(vartab, empty_vec);
+
+
+            let sub_invocations_map_put_2 = Instr::Call {
+                res: vec![sub_invocations_map],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::MapPut.name().to_string(),
+                },
+                args: vec![sub_invocations_map_var.clone(), keys[1].clone(), empty_vec_expr],
+            };
+
+            cfg.add(vartab, sub_invocations_map_put_2);
+
+            ///////////////////////////////////////////////////////////////////////////////////
+            
+            // now forming the enum. The enum is a VecObject[Symbol("Contract"), sub invokations map].
+
+            let contract_capitalized = Expression::BytesLiteral {
+                loc: Loc::Codegen,
+                ty: Type::String,
+                value: "Contract".as_bytes().to_vec(),
+            };
+
+            let contract_capitalized = soroban_encode(
+                loc,
+                vec![contract_capitalized],
+                ns,
+                vartab,
+                cfg,
+                false,
+            )
+            .2[0].clone();
+
+
+            
+            let enum_vec = vartab.temp_anonymous(&Type::Uint(64));
+            let enum_vec_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: enum_vec,
+            };
+
+            let enum_vec_new = Instr::Call {
+                res: vec![enum_vec],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VectorNew.name().to_string(),
+                },
+                args: vec![],
+            };
+
+            cfg.add(vartab, enum_vec_new);
+
+
+
+            let enum_vec_put = Instr::Call {
+                res: vec![enum_vec],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecPushBack.name().to_string(),
+                },
+                args: vec![enum_vec_var.clone(), contract_capitalized],
+            };
+
+            cfg.add(vartab, enum_vec_put);
+
+            let enum_vec_put_2 = Instr::Call {
+                res: vec![enum_vec],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecPushBack.name().to_string(),
+                },
+                args: vec![enum_vec_var.clone(), sub_invocations_map_var],
+            };
+
+            cfg.add(vartab, enum_vec_put_2);
+
+
+            ///////////////////////////////////////////////////////////////////////////////////
+            // now put the enum into a vec
+
+            let vec = vartab.temp_anonymous(&Type::Uint(64));
+            let vec_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: vec,
+            };
+
+            let vec_new = Instr::Call {
+                res: vec![vec],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VectorNew.name().to_string(),
+                },
+                args: vec![],
+            };
+
+            cfg.add(vartab, vec_new);
+
+            let vec_push_back = Instr::Call {
+                res: vec![vec],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecPushBack.name().to_string(),
+                },
+                args: vec![vec_var.clone(), enum_vec_var],
+            };
+
+            cfg.add(vartab, vec_push_back);
+
+            ///////////////////////////////////////////////////////////////////////////////////
+            // now for the moment of truth - the call to the host function auth_as_curr_contract
+            
+
+            let call_res = vartab.temp_anonymous(&Type::Uint(64));
+            let call_res_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: call_res,
+            };
+
+            let auth_call = Instr::Call {
+                res: vec![call_res],
+                return_tys: vec![Type::Void],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::AuthAsCurrContract.name().to_string(),
+                },
+                args: vec![vec_var],
+            };
+
+            cfg.add(vartab, auth_call);
+            
+
+            call_res_var
+        }
+
         _ => {
             let arguments: Vec<Expression> = args
                 .iter()

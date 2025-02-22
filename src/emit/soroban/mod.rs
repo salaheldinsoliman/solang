@@ -58,6 +58,26 @@ impl HostFunctions {
                 .fn_type(&[ty.into(), ty.into()], false),
             HostFunctions::ObjToU64 => bin.context.i64_type().fn_type(&[ty.into()], false),
             HostFunctions::ObjFromU64 => bin.context.i64_type().fn_type(&[ty.into()], false),
+            HostFunctions::RequireAuth => bin.context.i64_type().fn_type(&[ty.into()], false),
+            HostFunctions::AuthAsCurrContract => {
+                bin.context.i64_type().fn_type(&[ty.into()], false)
+            }
+            HostFunctions::MapNewFromLinearMemory => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into(), ty.into()], false),
+
+            HostFunctions::MapNew => bin.context.i64_type().fn_type(&[], false),
+
+            HostFunctions::MapPut => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into(), ty.into()], false),
+            
+            HostFunctions::VecPushBack => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into()], false),
         }
     }
 }
@@ -287,6 +307,12 @@ impl SorobanTarget {
             HostFunctions::ObjToU64,
             HostFunctions::ObjFromU64,
             HostFunctions::PutContractData,
+            HostFunctions::RequireAuth,
+            HostFunctions::AuthAsCurrContract,
+            HostFunctions::MapNewFromLinearMemory,
+            HostFunctions::MapNew,
+            HostFunctions::MapPut,
+            HostFunctions::VecPushBack,
         ];
 
         for func in &host_functions {

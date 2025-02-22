@@ -101,9 +101,15 @@ pub enum HostFunctions {
     SymbolNewFromLinearMemory,
     VectorNew,
     VectorNewFromLinearMemory,
+    MapNewFromLinearMemory,
     Call,
     ObjToU64,
     ObjFromU64,
+    RequireAuth,
+    AuthAsCurrContract,
+    MapNew,
+    MapPut,
+    VecPushBack,
 }
 
 impl HostFunctions {
@@ -118,6 +124,12 @@ impl HostFunctions {
             HostFunctions::Call => "d._",
             HostFunctions::ObjToU64 => "i.0",
             HostFunctions::ObjFromU64 => "i._",
+            HostFunctions::RequireAuth => "a.0",
+            HostFunctions::AuthAsCurrContract => "a.3",
+            HostFunctions::MapNewFromLinearMemory => "m.9",
+            HostFunctions::MapNew => "m._",
+            HostFunctions::MapPut => "m.0",
+            HostFunctions::VecPushBack => "v.6",
         }
     }
 }
@@ -1794,6 +1806,8 @@ pub enum Builtin {
     WriteUint256LE,
     WriteBytes,
     Concat,
+    RequireAuth,
+    AuthAsCurrContract,
 }
 
 impl From<&ast::Builtin> for Builtin {
@@ -1856,6 +1870,8 @@ impl From<&ast::Builtin> for Builtin {
             ast::Builtin::PrevRandao => Builtin::PrevRandao,
             ast::Builtin::ContractCode => Builtin::ContractCode,
             ast::Builtin::StringConcat | ast::Builtin::BytesConcat => Builtin::Concat,
+            ast::Builtin::RequireAuth => Builtin::RequireAuth,
+            ast::Builtin::AuthAsCurrContract => Builtin::AuthAsCurrContract,
             _ => panic!("Builtin should not be in the cfg"),
         }
     }
