@@ -23,7 +23,7 @@ describe('StorageTypes', () => {
     const secret = readFileSync('alice.txt', 'utf8').trim();
     keypair = StellarSdk.Keypair.fromSecret(secret);
 
-    let contractIdFile = path.join(dirname, '.soroban', 'contract-ids', 'storage_types.txt');
+    let contractIdFile = path.join(dirname, '.stellar', 'contract-ids', 'storage_types.txt');
     // Read contract address from file
     contractAddr = readFileSync(contractIdFile, 'utf8').trim().toString();
 

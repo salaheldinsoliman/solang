@@ -105,6 +105,20 @@ pub fn function_dispatch(
                 args: vec![],
             };
             wrapper_cfg.add(&mut vartab, placeholder);
+
+            let cfg_no = match cfg.function_no {
+                ASTFunction::SolidityFunction(no) => no,
+                _ => unreachable!(),
+            };
+
+            // add a call to the constructor
+            let placeholder = Instr::Call {
+                res: call_returns.clone(),
+                call: InternalCallTy::Static { cfg_no },
+                return_tys: vec![],
+                args: decoded.clone(),
+            };
+            wrapper_cfg.add(&mut vartab, placeholder);
         }
 
         if wrapper_cfg.name != "__constructor" {

@@ -10,7 +10,7 @@ const dirname = path.dirname(__filename);
 const server = new StellarSdk.SorobanRpc.Server("https://soroban-testnet.stellar.org:443");
 
 function readContractAddress(filename) {
-  return readFileSync(path.join(dirname, '.soroban', 'contract-ids', filename), 'utf8').trim();
+  return readFileSync(path.join(dirname, '.stellar', 'contract-ids', filename), 'utf8').trim();
 }
 
 describe('Cross Contract Calls', () => {

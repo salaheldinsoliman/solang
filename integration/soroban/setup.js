@@ -11,8 +11,8 @@ console.log("###################### Initializing ########################");
 const __filename = fileURLToPath(import.meta.url);
 const dirname = path.dirname(__filename);
 
-// variable for later setting pinned version of soroban in "$(dirname/target/bin/soroban)"
-const soroban = "soroban"
+// variable for later setting pinned version of stellar in "$(dirname/target/bin/stellar)"
+const stellar = "stellar"
 
 // Function to execute and log shell commands
 function exe(command) {
@@ -20,11 +20,14 @@ function exe(command) {
   execSync(command, { stdio: 'inherit' });
 }
 
-function generate_alice() {
-  exe(`${soroban} keys generate alice --network testnet --overwrite`);
+// Generate testnet keys for alice, bob, and charlie
+function generate_accounts() {
+  const accounts = ['alice', 'bob', 'charlie'];
 
-  // get the secret key of alice and put it in alice.txt
-  exe(`${soroban} keys show alice > alice.txt`);
+  for (const name of accounts) {
+    exe(`${stellar} keys generate ${name} --network testnet --overwrite`);
+    exe(`${stellar} keys show ${name} > ${name}.txt`);
+  }
 }
 
 
@@ -34,19 +37,19 @@ function filenameNoExtension(filename) {
 
 function deploy(wasm) {
 
-  let contractId = path.join(dirname, '.soroban', 'contract-ids', filenameNoExtension(wasm) + '.txt');
+  let contractId = path.join(dirname, '.stellar', 'contract-ids', filenameNoExtension(wasm) + '.txt');
 
-  exe(`(${soroban} contract deploy --wasm ${wasm} --ignore-checks --source-account alice --network testnet) > ${contractId}`);
+  exe(`(${stellar} contract deploy --wasm ${wasm} --ignore-checks --source-account alice --network testnet) > ${contractId}`);
 }
 
 function deploy_all() {
-  const contractsDir = path.join(dirname, '.soroban', 'contract-ids');
+  const contractsDir = path.join(dirname, '.stellar', 'contract-ids');
   mkdirSync(contractsDir, { recursive: true });
 
   let wasmFiles = readdirSync(`${dirname}`).filter(file => file.endsWith('.wasm'));
   console.log(dirname);
   
-  let rust_wasm = path.join('rust','target','wasm32-unknown-unknown', 'release-with-logs', 'hello_world.wasm');
+  let rust_wasm = path.join('rust','target','wasm32v1-none', 'release-with-logs', 'hello_world.wasm');
 
   // add rust wasm file to the list of wasm files
   wasmFiles.push(rust_wasm);
@@ -58,12 +61,12 @@ function deploy_all() {
 
 function add_testnet() {
 
-  exe(`${soroban} network add \
+  exe(`${stellar} network add \
     --global testnet \
     --rpc-url https://soroban-testnet.stellar.org:443 \
     --network-passphrase "Test SDF Network ; September 2015"`);
 }
 
 add_testnet();
-generate_alice();
+generate_accounts();
 deploy_all();
