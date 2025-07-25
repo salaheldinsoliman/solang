@@ -1,6 +1,6 @@
 /docs/build
 /docs/.venv
-
+Cargo.lock
 /target
 **/*.rs.bk
 *.ll
