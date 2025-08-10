@@ -2,7 +2,7 @@
 
 use crate::codegen::encoding::create_encoder;
 use crate::codegen::revert::{error_msg_with_loc, PanicCode, SolidityError};
-use crate::codegen::Expression;
+use crate::codegen::{Expression, HostFunctions};
 use crate::sema::ast::{ArrayLength, Contract, Namespace, StructType, Type};
 use std::cell::RefCell;
 use std::path::Path;
@@ -1039,13 +1039,13 @@ impl<'a> Binary<'a> {
         ty: &Type,
     ) -> BasicValueEnum<'a> {
         if self.ns.target == Target::Soroban {
-            if matches!(ty, Type::Bytes(_)) {
-                let n = if let Type::Bytes(n) = ty {
-                    n
-                } else {
-                    unreachable!()
-                };
+            println!("Inside vector_new for Soroban target");
+            println!("Type: {:?}", ty);
+            println!("Size: {:?}", size);
+            println!("Element Size: {:?}", elem_size);
 
+            match ty {
+                Type::Bytes(n) => {
                 let data = self
                     .builder
                     .build_alloca(self.context.i64_type().array_type((*n / 8) as u32), "data")
@@ -1075,7 +1075,9 @@ impl<'a> Binary<'a> {
 
                 // Return the constructed struct value
                 return struct_value.into();
-            } else if matches!(ty, Type::String) {
+                }
+
+                Type::String => {
                 let default = " ".as_bytes().to_vec();
                 let bs = init.unwrap_or(&default);
 
@@ -1099,8 +1101,28 @@ impl<'a> Binary<'a> {
                             .into(),
                     ])
                     .as_basic_value_enum();
+            },
+            
+
+                _ => {
+                    let function_value = self
+                        .module
+                        .get_function(HostFunctions::VectorNew.name())
+                        .unwrap();
+
+                    let res = self
+                        .builder
+                        .build_call(function_value, &[], "")
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap();
+
+                    return res;
+                }
             }
         }
+
         if let Some(init) = init {
             if init.is_empty() {
                 return self
@@ -1220,6 +1242,7 @@ impl<'a> Binary<'a> {
         array: PointerValue<'a>,
         index: IntValue<'a>,
     ) -> PointerValue<'a> {
+        println!("array_subscript emit function: {:?}, {:?}", array_ty, array);
         match array_ty {
             Type::Array(_, dim) => {
                 if matches!(dim.last(), Some(ArrayLength::Fixed(_))) {

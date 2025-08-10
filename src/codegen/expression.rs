@@ -3807,7 +3807,7 @@ fn array_subscript(
 
     let index_width = index_ty.bits(ns);
 
-    let array_length = match array_ty.deref_any() {
+    /*let array_length = match array_ty.deref_any() {
         Type::Bytes(n) => {
             let ast_bigint = bigint_to_expression(
                 &array.loc(),
@@ -3900,7 +3900,9 @@ fn array_subscript(
         _ => {
             unreachable!();
         }
-    };
+    };*/
+
+    let array_length =  Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Int(64), value: BigInt::from(0) };
 
     let array_width = array_length.ty().bits(ns);
     let width = std::cmp::max(array_width, index.ty().bits(ns));

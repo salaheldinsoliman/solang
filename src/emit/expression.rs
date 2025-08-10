@@ -1074,6 +1074,7 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             stack.into()
         }
         Expression::Load { ty, expr, .. } => {
+            println!("Load: {:?} {:?}", ty, expr);
             let ptr = expression(target, bin, expr, vartab, function).into_pointer_value();
 
             if ty.is_reference_type(bin.ns) && !ty.is_fixed_reference_type(bin.ns) {
@@ -1347,6 +1348,7 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             expr: a,
             index,
         } => {
+            println!("Subscript: {:?} {:?} {:?}", a, index, elem_ty);
             if ty.is_storage_bytes() {
                 let index = expression(target, bin, index, vartab, function).into_int_value();
                 let slot = expression(target, bin, a, vartab, function).into_int_value();
@@ -1549,6 +1551,7 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             initializer,
             ..
         } => {
+            println!("Allocating dynamic bytes: {ty:?} with size: {size:?} and initializer: {initializer:?}");
             if matches!(ty, Type::Slice(_)) {
                 let init = initializer.as_ref().unwrap();
 
