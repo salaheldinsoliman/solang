@@ -126,6 +126,7 @@ impl Expression {
         diagnostics: &mut Diagnostics,
     ) -> Result<Expression, ()> {
         let from = self.ty();
+        println!("Casting from type: {:?} to {:?}", from, to);
         if &from == to {
             return Ok(self.clone());
         }
@@ -159,12 +160,14 @@ impl Expression {
                     Err(())
                 }
             } else {
-                Expression::Load {
-                    loc: *loc,
-                    ty: r.as_ref().clone(),
-                    expr: Box::new(self.clone()),
-                }
-                .cast(loc, to, implicit, ns, diagnostics)
+                println!("Dereferencing a reference type: {:?} to {:?}", r, to);
+                // Expression::Load {
+                //     loc: *loc,
+                //     ty: r.as_ref().clone(),
+                //     expr: Box::new(self.clone()),
+                // }
+                // .cast(loc, to, implicit, ns, diagnostics)
+                Ok(self.clone())
             };
         }
 
@@ -388,6 +391,7 @@ impl Expression {
         ns: &Namespace,
         diagnostics: &mut Diagnostics,
     ) -> Result<Expression, ()> {
+        println!("Cast types from {:?} to {:?}", from, to);
         let address_bits = ns.address_length as u16 * 8;
 
         match (&from, &to) {

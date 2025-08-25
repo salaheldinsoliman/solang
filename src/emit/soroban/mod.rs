@@ -109,6 +109,11 @@ impl HostFunctions {
                 .context
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into()], false),
+            HostFunctions::VecGet => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into()], false),
+            HostFunctions::VecLen => bin.context.i64_type().fn_type(&[ty.into()], false),
         }
     }
 }
@@ -364,6 +369,8 @@ impl SorobanTarget {
             HostFunctions::StringNewFromLinearMemory,
             HostFunctions::StrKeyToAddr,
             HostFunctions::GetCurrentContractAddress,
+            HostFunctions::VecGet,
+            HostFunctions::VecLen,
         ];
 
         for func in &host_functions {

@@ -2,7 +2,7 @@
 
 use crate::codegen::encoding::create_encoder;
 use crate::codegen::revert::{error_msg_with_loc, PanicCode, SolidityError};
-use crate::codegen::Expression;
+use crate::codegen::{Expression, HostFunctions};
 use crate::sema::ast::{ArrayLength, Contract, Namespace, StructType, Type};
 use std::cell::RefCell;
 use std::path::Path;
@@ -951,6 +951,10 @@ impl<'a> Binary<'a> {
                     }
                 }
                 Type::Array(base_ty, dims) => {
+                    if self.ns.target == Target::Soroban && dims.last() == Some(&ArrayLength::Dynamic)
+                    {
+                        return BasicTypeEnum::IntType(self.context.i64_type());
+                    }
                     dims.iter()
                         .fold(self.llvm_field_ty(base_ty), |aty, dim| match dim {
                             ArrayLength::Fixed(d) => aty.array_type(d.to_u32().unwrap()).into(),
@@ -1038,8 +1042,10 @@ impl<'a> Binary<'a> {
         init: Option<&Vec<u8>>,
         ty: &Type,
     ) -> BasicValueEnum<'a> {
+        println!("vector_new emit function ty: {:?}", ty);
         if self.ns.target == Target::Soroban {
-            if matches!(ty, Type::Bytes(_)) {
+            match ty {
+                Type::Bytes(_) => {
                 let n = if let Type::Bytes(n) = ty {
                     n
                 } else {
@@ -1075,7 +1081,9 @@ impl<'a> Binary<'a> {
 
                 // Return the constructed struct value
                 return struct_value.into();
-            } else if matches!(ty, Type::String) {
+            },
+            Type::String =>
+              {
                 let default = " ".as_bytes().to_vec();
                 let bs = init.unwrap_or(&default);
 
@@ -1090,6 +1098,8 @@ impl<'a> Binary<'a> {
                     false,
                 );
 
+                println!("Creating a new string for Soroban target with type: {:?}", ty);
+
                 return ty
                     .const_named_struct(&[
                         data.into(),
@@ -1099,8 +1109,32 @@ impl<'a> Binary<'a> {
                             .into(),
                     ])
                     .as_basic_value_enum();
+            },
+            Type::Array(..) => {
+                                    println!("Creating a new vector for Soroban target with type: {:?}", ty);
+                    let function_value = self
+                        .module
+                        .get_function(HostFunctions::VectorNew.name())
+                        .unwrap();
+
+                    let res = self
+                        .builder
+                        .build_call(function_value, &[], "")
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap();
+
+                    return res;
+            }
+            _ => {
+                unreachable!("Soroban does not support vector_new for type: {:?}", ty);
+            }
             }
         }
+
+        println!("executing the regular vector_new function");
+
         if let Some(init) = init {
             if init.is_empty() {
                 return self
@@ -1220,6 +1254,7 @@ impl<'a> Binary<'a> {
         array: PointerValue<'a>,
         index: IntValue<'a>,
     ) -> PointerValue<'a> {
+        println!("array_subscript emit function: {:?}, {:?}", array_ty, array);
         match array_ty {
             Type::Array(_, dim) => {
                 if matches!(dim.last(), Some(ArrayLength::Fixed(_))) {

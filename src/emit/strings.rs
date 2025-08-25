@@ -18,6 +18,7 @@ pub(super) fn format_string<'a, T: TargetRuntime<'a> + ?Sized>(
     vartab: &HashMap<usize, Variable<'a>>,
     function: FunctionValue<'a>,
 ) -> BasicValueEnum<'a> {
+    println!("format_string args in emit: {args:#?}");
     // first we need to calculate the space we need
     let mut length = bin.context.i32_type().const_zero();
 

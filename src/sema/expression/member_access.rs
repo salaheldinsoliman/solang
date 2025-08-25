@@ -31,6 +31,10 @@ pub(super) fn member_access(
     diagnostics: &mut Diagnostics,
     resolve_to: ResolveTo,
 ) -> Result<Expression, ()> {
+    println!(
+        "member_access: loc: {:?}, e: {:?}, id: {:?}, ns: {:?}, symtable: {:?}",
+        loc, e, id, ns, symtable
+    );
     // is it a builtin special variable like "block.timestamp"
     if let pt::Expression::Variable(namespace) = e {
         if let Some((builtin, ty)) =

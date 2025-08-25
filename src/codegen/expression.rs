@@ -1193,6 +1193,63 @@ fn memory_array_push(
     loc: &pt::Loc,
     opt: &Options,
 ) -> Expression {
+
+    if ns.target == Target::Soroban {
+
+       
+
+        let array_var = expression(array, cfg, contract_no, func, ns, vartab, opt);
+
+        println!("value is {:?}", value);
+
+
+        let value_encoded = soroban_encode_arg(
+            value,
+            cfg,
+            vartab,
+            ns
+        );
+
+
+
+        let arr_var_no = if let  Expression::Variable { var_no, ty, .. } = array_var.clone() {
+            println!("dirty type is {:?}", ty.clone());
+            vartab.set_dirty(var_no);
+            var_no
+        } else {
+            unreachable!();
+        };
+
+    
+
+
+
+        let vec_push = Instr::Call {
+            res: vec![arr_var_no],
+            return_tys: vec![ty.clone()],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecPushBack.name().to_string(),
+            },
+            args: vec![array_var, value_encoded],
+        };
+
+
+   
+
+
+
+
+        cfg.add(vartab, vec_push);
+
+        return Expression::Variable {
+            loc: *loc,
+            ty: ty.clone(),
+            var_no: arr_var_no,
+        };
+
+
+    }
+
     let address_res = vartab.temp_anonymous(ty);
     let array_pos = match expression(array, cfg, contract_no, func, ns, vartab, opt) {
         Expression::Variable { var_no, .. } => {
@@ -3051,6 +3108,7 @@ fn format_string(
     loc: &pt::Loc,
     opt: &Options,
 ) -> Expression {
+    println!("format_string args: {args:#?}");
     let args = args
         .iter()
         .map(|(spec, arg)| {
@@ -3807,7 +3865,37 @@ fn array_subscript(
 
     let index_width = index_ty.bits(ns);
 
-    let array_length = match array_ty.deref_any() {
+    let array_length = if ns.target == Target::Soroban {
+        // In Soroban, we do not support dynamic arrays yet, so we can only have fixed-size arrays and bytes
+
+        let vec_len_var_no = vartab.temp_anonymous(&Type::Uint(64));
+
+        let vec_len_var = Expression::Variable {
+            loc: *loc,
+            ty: Type::Uint(64),
+            var_no: vec_len_var_no,
+        };
+
+        let vec_len_call = Instr::Call {
+            res: vec![vec_len_var_no],
+            return_tys: vec![Type::Uint(64)],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecLen.name().to_string(),
+            },
+            args: vec![array.clone()],
+        };
+
+        cfg.add(vartab, vec_len_call);
+
+        //let deoced_len = soroban_decode_arg( vec_len_var, cfg, vartab);
+
+
+        vec_len_var
+        
+    } else {
+    
+    
+    match array_ty.deref_any() {
         Type::Bytes(n) => {
             let ast_bigint = bigint_to_expression(
                 &array.loc(),
@@ -3900,7 +3988,8 @@ fn array_subscript(
         _ => {
             unreachable!();
         }
-    };
+    }
+};
 
     let array_width = array_length.ty().bits(ns);
     let width = std::cmp::max(array_width, index.ty().bits(ns));
@@ -4137,6 +4226,53 @@ fn array_subscript(
             )
         }
     } else {
+        println!("Codegen for array subscript with array type: {:?}", array_ty);
+
+        if ns.target == Target::Soroban {
+            // Soroban array retrieval is done via a host function call
+
+
+            
+
+            println!("Soroban array subscript codegen");
+            println!("index: {:?}", index);
+            println!("array: {:?}", array);
+
+            let index_encoded = soroban_encode_arg(
+                index,
+                cfg,
+                vartab,
+                ns
+            );
+
+            let ret_var_no = vartab.temp_anonymous(&Type::Uint(64));
+            let ret_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: ret_var_no,
+            };
+
+            let vec_get = Instr::Call {
+                res: vec![ret_var_no],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecGet.name().to_string(),
+                },
+                args: vec![array, index_encoded],
+            };
+
+            cfg.add(vartab, vec_get);
+
+
+            let decoded = soroban_decode_arg(
+                ret_var,
+                cfg,
+                vartab
+            );
+
+            return decoded;
+        }
+
         match array_ty.deref_memory() {
             Type::DynamicBytes | Type::Array(..) | Type::Slice(_) => Expression::Subscript {
                 loc: *loc,
