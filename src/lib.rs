@@ -18,7 +18,7 @@ pub mod sema;
 use file_resolver::FileResolver;
 use sema::diagnostics;
 use solang_parser::pt;
-use std::{ffi::OsStr, fmt};
+use std::{ffi::OsStr, fmt::{self, write}};
 
 /// The target chain you want to compile Solidity for.
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +33,7 @@ pub enum Target {
     /// Ethereum EVM, see <https://ethereum.org/en/developers/docs/evm/>
     EVM,
     Soroban,
+    Miden,
 }
 
 impl fmt::Display for Target {
@@ -42,6 +43,7 @@ impl fmt::Display for Target {
             Target::Polkadot { .. } => write!(f, "Polkadot"),
             Target::EVM => write!(f, "EVM"),
             Target::Soroban => write!(f, "Soroban"),
+            Target::Miden => write!(f, "Miden")
         }
     }
 }
@@ -55,6 +57,8 @@ impl PartialEq for Target {
             Target::Polkadot { .. } => matches!(other, Target::Polkadot { .. }),
             Target::EVM => matches!(other, Target::EVM),
             Target::Soroban => matches!(other, Target::Soroban),
+            Target::Miden => matches!(other, Target::Miden),
+            
         }
     }
 }

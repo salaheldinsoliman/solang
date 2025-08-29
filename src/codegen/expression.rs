@@ -3797,6 +3797,7 @@ fn array_subscript(
                 ty: array_ty.clone(),
                 exprs: vec![array, index],
             },
+            Target::Miden => unimplemented!()
         };
     }
 

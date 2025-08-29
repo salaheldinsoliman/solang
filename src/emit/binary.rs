@@ -43,6 +43,7 @@ use solang_parser::pt;
 
 #[cfg(feature = "soroban")]
 use super::soroban;
+use super::miden;
 
 static LLVM_INIT: OnceCell<()> = OnceCell::new();
 
@@ -170,6 +171,7 @@ pub struct Binary<'a> {
     global_constant_strings: RefCell<HashMap<Vec<u8>, PointerValue<'a>>>,
 
     pub return_data: RefCell<Option<PointerValue<'a>>>,
+    pub miden_instrs: Option<RefCell<Vec<String>>>,
 }
 
 impl<'a> Binary<'a> {
@@ -190,7 +192,12 @@ impl<'a> Binary<'a> {
             #[cfg(feature = "soroban")]
             Target::Soroban => {
                 soroban::SorobanTarget::build(context, &std_lib, contract, ns, opt, _contract_no)
+            },
+
+            Target::Miden => {
+                miden::Midentarget::build(context, &std_lib, contract, ns, opt, _contract_no)
             }
+
             _ => unimplemented!("target not implemented"),
         }
     }
@@ -200,6 +207,12 @@ impl<'a> Binary<'a> {
     /// each time a bin of this type is created).
     /// Pass our module to llvm for optimization and compilation
     pub fn code(&self, generate: Generate) -> Result<Vec<u8>, String> {
+
+
+        if self.ns.target == Target::Miden {
+            return Ok(self.miden_instrs.as_ref().unwrap().borrow().join("\n").as_bytes().to_vec());
+        }
+
         // return cached result if available
         if !self.code.borrow().is_empty() {
             return Ok(self.code.borrow().clone());
@@ -442,6 +455,11 @@ impl<'a> Binary<'a> {
             vector_init_empty: context.ptr_type(AddressSpace::default()).const_null(),
             global_constant_strings: RefCell::new(HashMap::new()),
             return_data: RefCell::new(None),
+            miden_instrs: if ns.target == Target::Miden {
+                Some(RefCell::new(Vec::new()))
+            } else {
+                None
+            }
         }
     }
 
