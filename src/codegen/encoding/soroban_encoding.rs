@@ -67,7 +67,7 @@ pub fn soroban_encode(
     let mut encoded_items = Vec::new();
 
     for (arg_no, item) in args.iter().enumerate() {
-        let var = soroban_encode_arg(item.clone(), cfg, vartab, ns);
+        let var = soroban_encode_arg(item.clone(), cfg, vartab, ns, None);
 
         encoded_items.push(var.clone());
 
@@ -113,6 +113,7 @@ pub fn soroban_decode_arg(
     wrapper_cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
 ) -> Expression {
+    println!("decoding arg: {:?}", arg);
     let ty = if let Type::Ref(inner_ty) = arg.ty() {
         *inner_ty
     } else {
@@ -141,7 +142,7 @@ pub fn soroban_decode_arg(
             signed: false,
         },
 
-        Type::Address(_) | Type::String => arg.clone(),
+        Type::Address(_) | Type::String | Type::Array(_, _) | Type::Uint(256) => arg.clone(),
 
         Type::Int(128) | Type::Uint(128) => decode_i128(wrapper_cfg, vartab, arg),
         Type::Uint(32) => {
@@ -190,19 +191,29 @@ pub fn soroban_decode_arg(
             signed: true,
         },
 
-        _ => unimplemented!(),
+        _ => unimplemented!("ty {:?} not yet supported in soroban decoder", ty),
     }
 }
 
+/// Encode a single argument into a soroban ScVal
+/// If to is Some, convert to that type first
+/// If to is None, use the type of item
 pub fn soroban_encode_arg(
     item: Expression,
     cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
     ns: &Namespace,
+    to: Option<&Type>,
 ) -> Expression {
     let obj = vartab.temp_name("obj_".to_string().as_str(), &Type::Uint(64));
 
-    let ret = match item.ty() {
+    let ty = if let Some(to) = to {
+        to.clone()
+    } else {
+        item.ty()
+    };
+
+    let ret = match ty {
         Type::Bool => {
             let encoded = match item {
                 Expression::BoolLiteral { value, .. } => Expression::NumberLiteral {

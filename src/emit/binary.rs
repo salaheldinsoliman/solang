@@ -951,7 +951,8 @@ impl<'a> Binary<'a> {
                     }
                 }
                 Type::Array(base_ty, dims) => {
-                    if self.ns.target == Target::Soroban && dims.last() == Some(&ArrayLength::Dynamic)
+                    if self.ns.target == Target::Soroban
+                        && dims.last() == Some(&ArrayLength::Dynamic)
                     {
                         return BasicTypeEnum::IntType(self.context.i64_type());
                     }
@@ -1046,72 +1047,77 @@ impl<'a> Binary<'a> {
         if self.ns.target == Target::Soroban {
             match ty {
                 Type::Bytes(_) => {
-                let n = if let Type::Bytes(n) = ty {
-                    n
-                } else {
-                    unreachable!()
-                };
+                    let n = if let Type::Bytes(n) = ty {
+                        n
+                    } else {
+                        unreachable!()
+                    };
 
-                let data = self
-                    .builder
-                    .build_alloca(self.context.i64_type().array_type((*n / 8) as u32), "data")
-                    .unwrap();
+                    let data = self
+                        .builder
+                        .build_alloca(self.context.i64_type().array_type((*n / 8) as u32), "data")
+                        .unwrap();
 
-                let ty = self.context.struct_type(
-                    &[data.get_type().into(), self.context.i64_type().into()],
-                    false,
-                );
+                    let ty = self.context.struct_type(
+                        &[data.get_type().into(), self.context.i64_type().into()],
+                        false,
+                    );
 
-                // Start with an undefined struct value
-                let mut struct_value = ty.get_undef();
+                    // Start with an undefined struct value
+                    let mut struct_value = ty.get_undef();
 
-                // Insert `data` into the first field of the struct
-                struct_value = self
-                    .builder
-                    .build_insert_value(struct_value, data, 0, "insert_data")
-                    .unwrap()
-                    .into_struct_value();
+                    // Insert `data` into the first field of the struct
+                    struct_value = self
+                        .builder
+                        .build_insert_value(struct_value, data, 0, "insert_data")
+                        .unwrap()
+                        .into_struct_value();
 
-                // Insert `size` into the second field of the struct
-                struct_value = self
-                    .builder
-                    .build_insert_value(struct_value, size, 1, "insert_size")
-                    .unwrap()
-                    .into_struct_value();
+                    // Insert `size` into the second field of the struct
+                    struct_value = self
+                        .builder
+                        .build_insert_value(struct_value, size, 1, "insert_size")
+                        .unwrap()
+                        .into_struct_value();
 
-                // Return the constructed struct value
-                return struct_value.into();
-            },
-            Type::String =>
-              {
-                let default = " ".as_bytes().to_vec();
-                let bs = init.unwrap_or(&default);
+                    // Return the constructed struct value
+                    return struct_value.into();
+                }
+                Type::String => {
+                    let default = " ".as_bytes().to_vec();
+                    let bs = init.unwrap_or(&default);
 
-                let data = self.emit_global_string("const_string", bs, true);
+                    let data = self.emit_global_string("const_string", bs, true);
 
-                // A constant string, or array, is represented by a struct with two fields: a pointer to the data, and its length.
-                let ty = self.context.struct_type(
-                    &[
-                        self.context.ptr_type(AddressSpace::default()).into(),
-                        self.context.i64_type().into(),
-                    ],
-                    false,
-                );
+                    // A constant string, or array, is represented by a struct with two fields: a pointer to the data, and its length.
+                    let ty = self.context.struct_type(
+                        &[
+                            self.context.ptr_type(AddressSpace::default()).into(),
+                            self.context.i64_type().into(),
+                        ],
+                        false,
+                    );
 
-                println!("Creating a new string for Soroban target with type: {:?}", ty);
+                    println!(
+                        "Creating a new string for Soroban target with type: {:?}",
+                        ty
+                    );
 
-                return ty
-                    .const_named_struct(&[
-                        data.into(),
-                        self.context
-                            .i64_type()
-                            .const_int(bs.len() as u64, false)
-                            .into(),
-                    ])
-                    .as_basic_value_enum();
-            },
-            Type::Array(..) => {
-                                    println!("Creating a new vector for Soroban target with type: {:?}", ty);
+                    return ty
+                        .const_named_struct(&[
+                            data.into(),
+                            self.context
+                                .i64_type()
+                                .const_int(bs.len() as u64, false)
+                                .into(),
+                        ])
+                        .as_basic_value_enum();
+                }
+                Type::Array(..) => {
+                    println!(
+                        "Creating a new vector for Soroban target with type: {:?}",
+                        ty
+                    );
                     let function_value = self
                         .module
                         .get_function(HostFunctions::VectorNew.name())
@@ -1126,10 +1132,10 @@ impl<'a> Binary<'a> {
                         .unwrap();
 
                     return res;
-            }
-            _ => {
-                unreachable!("Soroban does not support vector_new for type: {:?}", ty);
-            }
+                }
+                _ => {
+                    unreachable!("Soroban does not support vector_new for type: {:?}", ty);
+                }
             }
         }
 
@@ -1164,6 +1170,7 @@ impl<'a> Binary<'a> {
 
     /// Number of element in a vector
     pub(crate) fn vector_len(&self, vector: BasicValueEnum<'a>) -> IntValue<'a> {
+
         if vector.is_struct_value() {
             // slice
             let slice = vector.into_struct_value();

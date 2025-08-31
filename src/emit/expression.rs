@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::codegen::cfg::{HashTy, ReturnCode};
+use crate::codegen::encoding::soroban_encoding::soroban_encode_arg;
 use crate::codegen::revert::PanicCode;
+use crate::codegen::HostFunctions;
 use crate::codegen::{Builtin, Expression};
 use crate::emit::binary::Binary;
 use crate::emit::math::{build_binary_op_with_overflow_check, multiply, power};
@@ -1075,11 +1077,16 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
         }
         Expression::Load { ty, expr, .. } => {
             println!("Load: {:?} {:?}", ty, expr);
-            let ptr = expression(target, bin, expr, vartab, function).into_pointer_value();
+
+
+
+            let ptr = expression(target, bin, expr, vartab, function);
 
             if ty.is_reference_type(bin.ns) && !ty.is_fixed_reference_type(bin.ns) { 
+
+                println!("IN FIRST: {:?} {:?}", ty, expr);
                 let loaded_type = bin.context.ptr_type(AddressSpace::default());
-                let value = bin.builder.build_load(loaded_type, ptr, "").unwrap();
+                let value = bin.builder.build_load(loaded_type, ptr.into_pointer_value(), "").unwrap();
                 // if the pointer is null, it needs to be allocated
                 let allocation_needed = bin
                     .builder
@@ -1121,7 +1128,7 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
                     .unwrap()
                     .into_pointer_value();
 
-                bin.builder.build_store(ptr, new_struct).unwrap();
+                bin.builder.build_store(ptr.into_pointer_value(), new_struct).unwrap();
 
                 bin.builder
                     .build_unconditional_branch(already_allocated)
@@ -1142,8 +1149,58 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
 
                 combined_struct_ptr.as_basic_value()
             } else {
+
+                println!("IN SECOND: {:?} {:?}", ty, expr);
+
+                if bin.ns.target == Target::Soroban {
+
+
+                    match expr.clone().ty() {
+                        Type::Array(_,_) => {
+                            
+                            println!("ARRAY TYPE");
+                          
+                            
+                        },
+
+                        Type::Ref(_) => {
+
+                            println!("REF TYPE");
+                    let (array,array_index) = if let Expression::Subscript { loc, ty, array_ty, expr, index, value } = *expr.clone() {
+
+                        (expression(target, bin, &expr, vartab, function),
+                        expression(target, bin, &index, vartab, function))
+                    }
+                    else {
+                        panic!("expected subscript");
+                    };
+                    let vec_get = bin
+                        .builder
+                        .build_call(
+                            bin.module
+                                .get_function(HostFunctions::VecGet.name())
+                                .unwrap(),
+                            &[array.into(), array_index.into()],
+                            "vec_get",
+                        )
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap();
+
+                    return vec_get;
+       
+
+                        }
+
+                        _ => {}
+                    }
+
+
+                }
+
                 let loaded_type = bin.llvm_type(ty);
-                bin.builder.build_load(loaded_type, ptr, "").unwrap()
+                bin.builder.build_load(loaded_type, ptr.into_pointer_value(), "").unwrap()
             }
         }
 
@@ -1347,8 +1404,38 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             array_ty: ty,
             expr: a,
             index,
+            value
         } => {
             println!("Subscript: {:?} {:?} {:?}", a, index, elem_ty);
+                            if bin.ns.target == Target::Soroban {
+
+                    /*let array = expression(target, bin, a, vartab, function);
+                    let array_index = expression(target, bin, index, vartab, function).into_int_value();
+                    let vec_get = bin
+                        .builder
+                        .build_call(
+                            bin.module
+                                .get_function(HostFunctions::VecGet.name())
+                                .unwrap(),
+                            &[array.into(), array_index.into()],
+                            "vec_get",
+                        )
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap();*/
+                    let ret = if let Some(val) = value {
+                        expression(target, bin, val, vartab, function)
+                    }
+                    else {
+                        expression(target, bin, a, vartab, function)
+                    };
+
+
+                    return ret;
+                }
+
+
             if ty.is_storage_bytes() {
                 let index = expression(target, bin, index, vartab, function).into_int_value();
                 let slot = expression(target, bin, a, vartab, function).into_int_value();
@@ -1374,12 +1461,8 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
                         .into()
                 }
             } else if ty.is_dynamic_memory() {
-
-
-            
-
-
                 println!("Dynamic memory subscript: {:?} {:?}", a, index);
+
                 let array = expression(target, bin, a, vartab, function);
 
                 let mut array_index =
@@ -1597,6 +1680,8 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             args,
             ..
         } if args[0].ty().array_deref().is_builtin_struct().is_none() => {
+
+            println!("Array length of in emit: {:?}", args[0]);
             let array = expression(target, bin, &args[0], vartab, function);
 
             bin.vector_len(array).into()

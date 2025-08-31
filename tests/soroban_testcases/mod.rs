@@ -8,3 +8,4 @@ mod print;
 mod storage;
 mod token;
 mod ttl;
+mod memory_vector;

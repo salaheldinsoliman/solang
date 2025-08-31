@@ -12,12 +12,18 @@ use super::{
     yul::inline_assembly_cfg,
     Builtin, Expression, Options,
 };
-use crate::sema::ast::{
-    self, ArrayLength, DestructureField, Function, Namespace, RetrieveType, SolanaAccount,
-    Statement, Type, Type::Uint,
-};
+use crate::codegen::{cfg::InternalCallTy, encoding::soroban_encoding::{soroban_decode_arg, soroban_encode_arg}};
+use crate::codegen::HostFunctions;
 use crate::sema::solana_accounts::BuiltinAccounts;
 use crate::sema::Recurse;
+use crate::{
+    sema::ast::{
+        self, ArrayLength, DestructureField, Function, Namespace, RetrieveType, SolanaAccount,
+        Statement,
+        Type::{self, Uint},
+    },
+    Target,
+};
 use num_bigint::BigInt;
 use num_traits::Zero;
 use solang_parser::pt::{self, CodeLocation, Loc, Loc::Codegen};
@@ -128,20 +134,29 @@ pub(crate) fn statement(
                 return;
             }
 
-            // Add variable as undefined
-            cfg.add(
-                vartab,
-                Instr::Set {
-                    loc: *loc,
-                    res: *pos,
-                    expr: Expression::Undefined {
-                        ty: param.ty.clone(),
-                    },
+            let mut instr = Instr::Set {
+                loc: *loc,
+                res: *pos,
+                expr: Expression::Undefined {
+                    ty: param.ty.clone(),
                 },
-            );
-            // Handling arrays without size, defaulting the initial size with zero
+            };
 
+            // Handling arrays without size, defaulting the initial size with zero
             if matches!(param.ty, Type::Array(..)) {
+                if ns.target == Target::Soroban {
+                    println!("Generating VecLen for array declaration without size in soroban");
+
+                    instr = Instr::Call {
+                        res: vec![*pos],
+                        return_tys: vec![Type::Uint(64)],
+                        call: InternalCallTy::HostFunction {
+                            name: HostFunctions::VectorNew.name().to_string(),
+                        },
+                        args: vec![],
+                    };
+                }
+
                 let num = Expression::NumberLiteral {
                     loc: Codegen,
                     ty: Uint(32),
@@ -158,6 +173,8 @@ pub(crate) fn statement(
                 );
                 cfg.array_lengths_temps.insert(*pos, temp_res);
             }
+
+            cfg.add(vartab, instr);
         }
         Statement::Return(_, expr) => {
             if let Some(return_instr) = return_override {
@@ -982,6 +999,7 @@ fn try_load_and_cast(
     cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
 ) -> Expression {
+    println!("try_load_and_cast: expr: {expr:?}, to_ty: {to_ty:?}");
     match expr.ty() {
         Type::StorageRef(_, ty) => {
             if let Expression::Subscript { array_ty, .. } = &expr {
@@ -1012,7 +1030,35 @@ fn try_load_and_cast(
                 var_no: anonymous_no,
             }
         }
-        Type::Ref(ty) => match *ty {
+        Type::Ref(ty) => 
+        
+        {
+
+            println!("try load expr: {expr:?}, ty: {ty:?}");
+            /*if ns.target == Target::Soroban {
+                println!("Decoding reference type in soroban ");
+                if let Expression::Subscript {expr, index, .. } = &expr {
+                   let new = vartab.temp_anonymous(&Type::Uint(64));
+
+                   let index_encoded = soroban_encode_arg(*index.clone(), cfg, vartab, ns, None);
+
+                     cfg.add(vartab, Instr::Call {
+                          res: vec![new],
+                          return_tys: vec![Type::Uint(64)],
+                          call: InternalCallTy::HostFunction { name: HostFunctions::VecGet.name().to_string() },
+                          args: vec![*expr.clone(), index_encoded.clone()],
+                     });
+
+
+                    let ret = Expression::Variable { loc: *loc, ty: ty.as_ref().clone(), var_no: new };
+
+                    soroban_decode_arg(ret, cfg, vartab)
+                }
+                else {
+                    expr.cast(to_ty, ns)
+                }
+            } else {*/
+            match *ty {
             Type::Array(_, _) => expr.cast(to_ty, ns),
             _ => Expression::Load {
                 loc: pt::Loc::Builtin,
@@ -1020,6 +1066,7 @@ fn try_load_and_cast(
                 expr: expr.clone().into(),
             }
             .cast(to_ty, ns),
+        }
         },
         _ => expr.cast(to_ty, ns),
     }

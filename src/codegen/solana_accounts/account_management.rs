@@ -252,6 +252,7 @@ fn index_accounts_vector(index: usize) -> Expression {
             ty: Type::Uint(32),
             value: BigInt::from(index),
         }),
+        value: None,
     }
 }
 

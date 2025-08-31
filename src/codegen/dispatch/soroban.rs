@@ -172,7 +172,7 @@ fn encode_return(
     cfg: &mut ControlFlowGraph,
 ) -> Expression {
     if returns.len() == 1 {
-        soroban_encode_arg(returns[0].clone(), cfg, vartab, ns)
+        soroban_encode_arg(returns[0].clone(), cfg, vartab, ns, None)
     } else {
         Expression::NumberLiteral {
             loc: Loc::Codegen,
