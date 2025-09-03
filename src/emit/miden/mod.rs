@@ -11,6 +11,8 @@ use inkwell::{
     types::FunctionType,
 };
 
+use miden_vm::assembly::Assembler;
+
 
 pub struct Midentarget;
 
