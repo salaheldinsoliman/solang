@@ -32,6 +32,7 @@ use crate::sema::{
 };
 use crate::Target;
 use core::panic;
+use ethers_core::abi::Uint;
 use num_bigint::{BigInt, Sign};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use solang_parser::pt::{self, CodeLocation, Loc};
@@ -876,6 +877,36 @@ pub fn expression(
             kind: ast::Builtin::ArrayPop,
             args,
         } => {
+            if ns.target == Target::Soroban {
+                println!("Generating soroban vec pop");
+                let array_var = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+
+                let arr_var_no = if let Expression::Variable { var_no, ty, .. } = array_var.clone()
+                {
+                    println!("dirty type is {:?}", ty.clone());
+                    vartab.set_dirty(var_no);
+                    var_no
+                } else {
+                    unreachable!();
+                };
+
+                let vec_pop = Instr::Call {
+                    res: vec![arr_var_no],
+                    return_tys: vec![Type::Uint(64)],
+                    call: InternalCallTy::HostFunction {
+                        name: HostFunctions::VecPopBack.name().to_string(),
+                    },
+                    args: vec![array_var],
+                };
+
+                cfg.add(vartab, vec_pop);
+
+                return Expression::Variable {
+                    loc: *loc,
+                    ty: args[0].ty(),
+                    var_no: arr_var_no,
+                };
+            }
             if args[0].ty().is_contract_storage() {
                 if ns.target == Target::Solana || args[0].ty().is_storage_bytes() {
                     array_pop(loc, args, &ty[0], cfg, contract_no, func, ns, vartab, opt)
@@ -1193,6 +1224,39 @@ fn memory_array_push(
     loc: &pt::Loc,
     opt: &Options,
 ) -> Expression {
+    if ns.target == Target::Soroban {
+        let array_var = expression(array, cfg, contract_no, func, ns, vartab, opt);
+
+        println!("value is {:?}", value);
+
+        let value_encoded = soroban_encode_arg(value, cfg, vartab, ns);
+
+        let arr_var_no = if let Expression::Variable { var_no, ty, .. } = array_var.clone() {
+            println!("dirty type is {:?}", ty.clone());
+            vartab.set_dirty(var_no);
+            var_no
+        } else {
+            unreachable!();
+        };
+
+        let vec_push = Instr::Call {
+            res: vec![arr_var_no],
+            return_tys: vec![ty.clone()],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecPushBack.name().to_string(),
+            },
+            args: vec![array_var, value_encoded],
+        };
+
+        cfg.add(vartab, vec_push);
+
+        return Expression::Variable {
+            loc: *loc,
+            ty: ty.clone(),
+            var_no: arr_var_no,
+        };
+    }
+
     let address_res = vartab.temp_anonymous(ty);
     let array_pos = match expression(array, cfg, contract_no, func, ns, vartab, opt) {
         Expression::Variable { var_no, .. } => {
@@ -2862,6 +2926,26 @@ fn expr_builtin(
                 .collect();
 
             if !arguments.is_empty() && builtin == ast::Builtin::ArrayLength {
+                println!("ArrayLength called with arg: {:?}", arguments[0]);
+
+                if ns.target == Target::Soroban {
+
+                    let array_length_var = vartab.temp_anonymous(&Type::Uint(32));
+
+                    let vec_len = Instr::Call {
+                        res: vec![array_length_var],
+                        return_tys: vec![Type::Uint(64)],
+                        call: InternalCallTy::HostFunction {
+                            name: HostFunctions::VecLen.name().to_string(),
+                        },
+                        args: vec![arguments[0].clone()],
+                    };
+
+                    cfg.add(vartab, vec_len);
+
+                    return soroban_decode_arg( Expression::Variable { loc: Loc::Codegen, ty: Type::Uint(32), var_no: array_length_var }, cfg, vartab);
+
+                }
                 // If an array length instruction is called
                 // Get the variable it is assigned with
                 if let Expression::Variable { var_no, .. } = &arguments[0] {
@@ -3051,6 +3135,7 @@ fn format_string(
     loc: &pt::Loc,
     opt: &Options,
 ) -> Expression {
+    println!("format_string args: {args:#?}");
     let args = args
         .iter()
         .map(|(spec, arg)| {
@@ -3195,7 +3280,7 @@ pub fn assign_single(
             let left_ty = left.ty();
             let ty = cfg_right.ty();
 
-            let pos = vartab.temp_anonymous(&ty);
+            let mut pos = vartab.temp_anonymous(&ty);
 
             // Set a subscript in storage bytes needs special handling
             let set_storage_bytes = if let ast::Expression::Subscript { array_ty, .. } = &left {
@@ -3216,13 +3301,15 @@ pub fn assign_single(
                 } else {
                     cfg_right
                 };
+            
+            println!("cfg right for assignment: {cfg_right:?}");
 
             cfg.add(
                 vartab,
                 Instr::Set {
                     loc: pt::Loc::Codegen,
                     res: pos,
-                    expr: cfg_right,
+                    expr: cfg_right.clone(),
                 },
             );
 
@@ -3273,6 +3360,61 @@ pub fn assign_single(
                     );
                 }
                 Type::Ref(_) => {
+                    println!("Assign to ref: {left_ty:?}");
+
+                    if ns.target == Target::Soroban {
+                        println!("SUBSCRIPT WHEN NOT SUBSCRIPT: {cfg_right:?}");
+                        if let Expression::Subscript {
+                            loc,
+                            ty,
+                            array_ty,
+                            expr,
+                            index,
+                            value
+                        } = &dest
+                        {
+                            println!("Assign to ref subscript: {array_ty:?}");
+                            println!("dest expr: {dest:?}");
+                            println!(" index    : {index:?}");
+
+
+
+                            let var_no = if let Expression::Variable { var_no, .. } = &**expr {
+                                *var_no
+                            } else {
+                                unreachable!()
+                            };
+
+                            pos = var_no;
+
+                            //let arr = expression(left, cfg, contract_no, func, ns, vartab, opt);
+                            let value_encoded = soroban_encode_arg(cfg_right, cfg, vartab, ns);
+
+                            println!("index normal: {index:?}");
+
+                            //let index = Expression::NumberLiteral { loc: Loc::Codegen, ty: Type::Uint(32), value: BigInt::from(0) };
+
+                            //let index_encoded = soroban_encode_arg(*index.clone(), cfg, vartab, ns, None);
+
+                            // /println!("index encoded: {index_encoded:?}");
+
+                            //vartab.set_dirty(pos);
+                            println!("  dest var is {:?}", dest);
+                            println!("  expr is {:?}", expr);
+
+                            
+                            let vec_put = Instr::Call {
+                                res: vec![pos],
+                                return_tys: vec![Type::Uint(64)],
+                                call: InternalCallTy::HostFunction {
+                                    name: HostFunctions::VecPut.name().to_string(),
+                                },
+                                args: vec![*expr.clone(), *index.clone(), value_encoded],
+                            };
+
+                            cfg.add(vartab, vec_put);
+                        }
+                    } else {
                     cfg.add(
                         vartab,
                         Instr::Store {
@@ -3284,6 +3426,7 @@ pub fn assign_single(
                             },
                         },
                     );
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -3777,6 +3920,7 @@ fn array_subscript(
             array_ty: array_ty.clone(),
             expr: Box::new(expression(array, cfg, contract_no, func, ns, vartab, opt)),
             index: Box::new(expression(index, cfg, contract_no, func, ns, vartab, opt)),
+            value: None,
         };
     }
 
@@ -3791,6 +3935,7 @@ fn array_subscript(
                 array_ty: array_ty.clone(),
                 expr: Box::new(array),
                 index: Box::new(index),
+                value: None,
             },
             Target::Polkadot { .. } => Expression::Keccak256 {
                 loc: *loc,
@@ -3807,7 +3952,33 @@ fn array_subscript(
 
     let index_width = index_ty.bits(ns);
 
-    let array_length = match array_ty.deref_any() {
+    let array_length = if ns.target == Target::Soroban {
+        // In Soroban, we do not support dynamic arrays yet, so we can only have fixed-size arrays and bytes
+
+        let vec_len_var_no = vartab.temp_anonymous(&Type::Uint(64));
+
+        let vec_len_var = Expression::Variable {
+            loc: *loc,
+            ty: Type::Uint(64),
+            var_no: vec_len_var_no,
+        };
+
+        let vec_len_call = Instr::Call {
+            res: vec![vec_len_var_no],
+            return_tys: vec![Type::Uint(64)],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecLen.name().to_string(),
+            },
+            args: vec![array.clone()],
+        };
+
+        cfg.add(vartab, vec_len_call);
+
+        //let deoced_len = soroban_decode_arg( vec_len_var, cfg, vartab);
+
+        vec_len_var
+    } else {
+    match array_ty.deref_any() {
         Type::Bytes(n) => {
             let ast_bigint = bigint_to_expression(
                 &array.loc(),
@@ -3900,6 +4071,7 @@ fn array_subscript(
         _ => {
             unreachable!();
         }
+        }
     };
 
     let array_width = array_length.ty().bits(ns);
@@ -3948,6 +4120,8 @@ fn array_subscript(
     );
 
     cfg.set_basic_block(out_of_bounds);
+    // Soroban array bounds checking is done in the host function
+    if ns.target != Target::Soroban {
     log_runtime_error(
         opt.log_runtime_errors,
         "array index out of bounds",
@@ -3956,6 +4130,7 @@ fn array_subscript(
         vartab,
         ns,
     );
+}
     let error = SolidityError::Panic(PanicCode::ArrayIndexOob);
     assert_failure(loc, error, ns, cfg, vartab);
 
@@ -4042,6 +4217,7 @@ fn array_subscript(
                     array_ty: array_ty.clone(),
                     expr: Box::new(array),
                     index: Box::new(index),
+                    value: None,
                 }
             } else {
                 let index = Expression::Variable {
@@ -4079,6 +4255,7 @@ fn array_subscript(
                         array_ty: array_ty.clone(),
                         expr: Box::new(array),
                         index: Box::new(index),
+                        value: None,
                     }
                 }
             }
@@ -4137,17 +4314,101 @@ fn array_subscript(
             )
         }
     } else {
+        println!(
+            "Codegen for array subscript with array type: {:?}",
+            array_ty
+        );
+
+        /*if ns.target == Target::Soroban {
+            // Soroban array retrieval is done via a host function call
+
+            println!("Soroban array subscript codegen");
+            println!("index: {:?}", index);
+            println!("array: {:?}", array);
+
+            let index_encoded = soroban_encode_arg(index, cfg, vartab, ns);
+
+            let ret_var_no = vartab.temp_anonymous(&Type::Uint(64));
+            let ret_var = Expression::Variable {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                var_no: ret_var_no,
+            };
+
+            let vec_get = Instr::Call {
+                res: vec![ret_var_no],
+                return_tys: vec![Type::Uint(64)],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecGet.name().to_string(),
+                },
+                args: vec![array, index_encoded],
+            };
+
+            cfg.add(vartab, vec_get);
+
+            let decoded = soroban_decode_arg(ret_var, cfg, vartab);
+
+            return decoded;
+        }*/
+        println!("coerced ty: {:?}", coerced_ty);
+
+        let index = match ns.target {
+            Target::Soroban =>soroban_encode_arg(Expression::Variable {
+                loc: index_loc,
+                ty: Type::Uint(32),
+                var_no: pos,
+            }, cfg, vartab, ns) ,
+            _ => Expression::Variable {
+                loc: index_loc,
+                ty: coerced_ty.clone(),
+                var_no: pos,
+            },
+        };
+
+        let value = if ns.target == Target::Soroban {
+
+            println!("Soroban array subscript codegen {:?}", array);
+            
+            if let Type::Array(_, _) = array.ty() {
+            println!("Embedding read value");
+            let new = vartab.temp_anonymous(&elem_ty);
+
+            let vec_get = Instr::Call {
+                res: vec![new],
+                return_tys: vec![elem_ty.clone()],
+                call: InternalCallTy::HostFunction {
+                    name: HostFunctions::VecGet.name().to_string(),
+                },
+                args: vec![array.clone(), index.clone()],
+            };
+
+            cfg.add(vartab, vec_get);
+
+            let ret = Expression::Variable {
+                loc: *loc,
+                ty: elem_ty.clone(),
+                var_no: new,
+            };
+
+            let ret =  soroban_decode_arg(ret, cfg, vartab);
+
+            Some(Box::new(ret))
+        }
+        else {
+            None
+        }
+        } else {
+            None
+        };
+
         match array_ty.deref_memory() {
             Type::DynamicBytes | Type::Array(..) | Type::Slice(_) => Expression::Subscript {
                 loc: *loc,
                 ty: elem_ty.clone(),
                 array_ty: array_ty.clone(),
                 expr: Box::new(array),
-                index: Box::new(Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty,
-                    var_no: pos,
-                }),
+                index: Box::new(index),
+                value: value,
             },
             _ => {
                 // should not happen as type-checking already done
@@ -4269,6 +4530,7 @@ fn array_literal_to_memory_array(
                         ty: Type::Uint(32),
                         value: BigInt::from(item_no),
                     }),
+                    value: None,
                 },
                 data: item.clone(),
             },

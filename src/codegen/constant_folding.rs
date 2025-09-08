@@ -10,6 +10,7 @@ use crate::sema::{
 use num_bigint::{BigInt, Sign};
 use num_traits::{ToPrimitive, Zero};
 use ripemd::Ripemd160;
+use serde::de::value;
 use sha2::{Digest, Sha256};
 use solang_parser::pt;
 use solang_parser::pt::Loc;
@@ -612,7 +613,8 @@ fn expression(
             array_ty,
             expr,
             index,
-        } => subscript(loc, ty, array_ty, expr, index, vars, cfg, ns),
+            value,
+        } => subscript(loc, ty, array_ty, expr, index, vars, cfg, ns, value),
         Expression::StructMember {
             loc,
             ty,
@@ -1865,6 +1867,7 @@ fn subscript(
     vars: Option<&reaching_definitions::VarDefs>,
     cfg: &ControlFlowGraph,
     ns: &mut Namespace,
+    value: &Option<Box<Expression>>,
 ) -> (Expression, bool) {
     let array = expression(array, vars, cfg, ns);
     let index = expression(index, vars, cfg, ns);
@@ -1876,6 +1879,7 @@ fn subscript(
             array_ty: array_ty.clone(),
             expr: Box::new(array.0),
             index: Box::new(index.0),
+            value: value.clone(),
         },
         false,
     )

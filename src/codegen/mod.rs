@@ -105,6 +105,11 @@ pub enum HostFunctions {
     SymbolNewFromLinearMemory,
     VectorNew,
     VectorNewFromLinearMemory,
+    VecGet,
+    VecLen,
+    VecPushBack,
+    VecPopBack,
+    VecPut,
     MapNewFromLinearMemory,
     Call,
     ObjToU64,
@@ -119,7 +124,7 @@ pub enum HostFunctions {
     AuthAsCurrContract,
     MapNew,
     MapPut,
-    VecPushBack,
+
     StringNewFromLinearMemory,
     StrKeyToAddr,
     GetCurrentContractAddress,
@@ -137,6 +142,10 @@ impl HostFunctions {
             HostFunctions::SymbolNewFromLinearMemory => "b.j",
             HostFunctions::VectorNew => "v._",
             HostFunctions::VectorNewFromLinearMemory => "v.g",
+            HostFunctions::VecGet => "v.1",
+            HostFunctions::VecLen => "v.3",
+            HostFunctions::VecPopBack => "v.7",
+            HostFunctions::VecPut => "v.0",
             HostFunctions::Call => "d._",
             HostFunctions::ObjToU64 => "i.0",
             HostFunctions::ObjFromU64 => "i._",
@@ -695,6 +704,7 @@ pub enum Expression {
         array_ty: Type,
         expr: Box<Expression>,
         index: Box<Expression>,
+        value: Option<Box<Expression>>, // Some if readonly access, None if write access
     },
     Subtract {
         loc: pt::Loc,
@@ -1665,12 +1675,14 @@ impl Expression {
                     array_ty,
                     expr,
                     index,
+                    value
                 } => Expression::Subscript {
                     loc: *loc,
                     ty: elem_ty.clone(),
                     array_ty: array_ty.clone(),
                     expr: Box::new(filter(expr, ctx)),
                     index: Box::new(filter(index, ctx)),
+                    value: value.clone(),
                 },
                 Expression::StructMember {
                     loc,

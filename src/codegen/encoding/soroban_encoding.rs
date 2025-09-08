@@ -113,6 +113,7 @@ pub fn soroban_decode_arg(
     wrapper_cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
 ) -> Expression {
+    println!("decoding arg: {:?}", arg);
     let ty = if let Type::Ref(inner_ty) = arg.ty() {
         *inner_ty
     } else {

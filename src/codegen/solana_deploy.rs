@@ -125,6 +125,7 @@ pub(super) fn solana_deploy(
             value: BigInt::zero(),
         }
         .into(),
+        value: None,
     };
 
     let loaded_item = Expression::Load {

@@ -1476,6 +1476,7 @@ pub(crate) trait AbiEncoding {
         vartab: &mut Vartable,
         cfg: &mut ControlFlowGraph,
     ) -> Expression {
+        println!("Calculating size of array: {array:?} of type {elem_ty:?} with dims {dims:?}");
         let dyn_dims = dims.iter().filter(|d| **d == ArrayLength::Dynamic).count();
 
         // If the array does not have variable length elements,
@@ -1831,6 +1832,7 @@ fn index_array(
                 ty: Type::Uint(32),
                 var_no: indexes[dims.len() - i - 1],
             }),
+            value: None
         };
 
         // We should only load if the dimension is dynamic.

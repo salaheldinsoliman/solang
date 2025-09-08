@@ -3,7 +3,7 @@
 use crate::codegen::{
     cfg::{ControlFlowGraph, Instr, InternalCallTy, ReturnCode},
     revert::PanicCode,
-    Expression,
+    Expression, HostFunctions,
 };
 use crate::emit::binary::Binary;
 use crate::emit::cfg::{create_block, BasicBlock, Work};
@@ -68,6 +68,27 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             if let Expression::Undefined { ty: expr_type } = expr {
                 // If the variable has been declared as undefined, but we can
                 // initialize it with a default value
+                // For Soroban, we 
+                if bin.ns.target == Target::Soroban {
+                   
+                  let vec_new = bin
+                        .builder
+                        .build_call(
+                            bin.module
+                                .get_function(HostFunctions::VectorNew.name())
+                                .unwrap(),
+                            &[],
+                            "vec_new",
+                        )
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap();
+
+
+                w.vars.get_mut(res).unwrap().value = vec_new;
+                }
+
                 if let Some(default_expr) = expr_type.default(bin.ns) {
                     w.vars.get_mut(res).unwrap().value =
                         expression(target, bin, &default_expr, &w.vars, function);
@@ -185,105 +206,122 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             array,
             value,
         } => {
-            let arr = w.vars[array].value;
+            if bin.ns.target == Target::Soroban {
+                // build a vec_push_back instruction
 
-            let llvm_ty = bin.llvm_type(ty);
-            let elem_ty = ty.array_elem();
+                let function_signature = bin
+                    .module
+                    .get_function(HostFunctions::VecPushBack.name())
+                    .unwrap();
 
-            // Calculate total size for reallocation
-            let llvm_elem_ty = bin.llvm_field_ty(&elem_ty);
-            let elem_size = llvm_elem_ty
-                .size_of()
-                .unwrap()
-                .const_cast(bin.context.i32_type(), false);
-            let len = bin.vector_len(arr);
-            let new_len = bin
-                .builder
-                .build_int_add(len, bin.context.i32_type().const_int(1, false), "")
-                .unwrap();
-            let vec_size = bin
-                .module
-                .get_struct_type("struct.vector")
-                .unwrap()
-                .size_of()
-                .unwrap()
-                .const_cast(bin.context.i32_type(), false);
-            let size = bin.builder.build_int_mul(elem_size, new_len, "").unwrap();
-            let size = bin.builder.build_int_add(size, vec_size, "").unwrap();
+                let value = expression(target, bin, value, &w.vars, function);
 
-            // Reallocate and reassign the array pointer
-            let new = bin
-                .builder
-                .build_call(
-                    bin.module.get_function("__realloc").unwrap(),
-                    &[arr.into(), size.into()],
-                    "",
-                )
-                .unwrap()
-                .try_as_basic_value()
-                .left()
-                .unwrap()
-                .into_pointer_value();
-            w.vars.get_mut(array).unwrap().value = new.into();
+                let arr = w.vars[array].value;
 
-            // Store the value into the last element
-            let slot_ptr = unsafe {
                 bin.builder
-                    .build_gep(
-                        llvm_ty,
-                        new,
-                        &[
-                            bin.context.i32_type().const_zero(),
-                            bin.context.i32_type().const_int(2, false),
-                            bin.builder.build_int_mul(len, elem_size, "").unwrap(),
-                        ],
-                        "data",
-                    )
-                    .unwrap()
-            };
-            let value = expression(target, bin, value, &w.vars, function);
-            let value = if elem_ty.is_fixed_reference_type(bin.ns) {
-                w.vars.get_mut(res).unwrap().value = slot_ptr.into();
-                let load_ty = bin.llvm_type(&elem_ty);
-                bin.builder
-                    .build_load(load_ty, value.into_pointer_value(), "elem")
-                    .unwrap()
+                    .build_call(function_signature, &[arr.into(), value.into()], "")
+                    .unwrap();
             } else {
-                w.vars.get_mut(res).unwrap().value = value;
-                value
-            };
-            bin.builder.build_store(slot_ptr, value).unwrap();
+                let arr = w.vars[array].value;
 
-            // Update the len and size field of the vector struct
-            let len_ptr = unsafe {
-                bin.builder
-                    .build_gep(
-                        llvm_ty,
-                        new,
-                        &[
-                            bin.context.i32_type().const_zero(),
-                            bin.context.i32_type().const_zero(),
-                        ],
-                        "len",
+                let llvm_ty = bin.llvm_type(ty);
+                let elem_ty = ty.array_elem();
+
+                // Calculate total size for reallocation
+                let llvm_elem_ty = bin.llvm_field_ty(&elem_ty);
+                let elem_size = llvm_elem_ty
+                    .size_of()
+                    .unwrap()
+                    .const_cast(bin.context.i32_type(), false);
+                let len = bin.vector_len(arr);
+                let new_len = bin
+                    .builder
+                    .build_int_add(len, bin.context.i32_type().const_int(1, false), "")
+                    .unwrap();
+                let vec_size = bin
+                    .module
+                    .get_struct_type("struct.vector")
+                    .unwrap()
+                    .size_of()
+                    .unwrap()
+                    .const_cast(bin.context.i32_type(), false);
+                let size = bin.builder.build_int_mul(elem_size, new_len, "").unwrap();
+                let size = bin.builder.build_int_add(size, vec_size, "").unwrap();
+
+                // Reallocate and reassign the array pointer
+                let new = bin
+                    .builder
+                    .build_call(
+                        bin.module.get_function("__realloc").unwrap(),
+                        &[arr.into(), size.into()],
+                        "",
                     )
                     .unwrap()
-            };
-            bin.builder.build_store(len_ptr, new_len).unwrap();
-
-            let size_ptr = unsafe {
-                bin.builder
-                    .build_gep(
-                        llvm_ty,
-                        new,
-                        &[
-                            bin.context.i32_type().const_zero(),
-                            bin.context.i32_type().const_int(1, false),
-                        ],
-                        "size",
-                    )
+                    .try_as_basic_value()
+                    .left()
                     .unwrap()
-            };
-            bin.builder.build_store(size_ptr, new_len).unwrap();
+                    .into_pointer_value();
+                w.vars.get_mut(array).unwrap().value = new.into();
+
+                // Store the value into the last element
+                let slot_ptr = unsafe {
+                    bin.builder
+                        .build_gep(
+                            llvm_ty,
+                            new,
+                            &[
+                                bin.context.i32_type().const_zero(),
+                                bin.context.i32_type().const_int(2, false),
+                                bin.builder.build_int_mul(len, elem_size, "").unwrap(),
+                            ],
+                            "data",
+                        )
+                        .unwrap()
+                };
+                let value = expression(target, bin, value, &w.vars, function);
+                let value = if elem_ty.is_fixed_reference_type(bin.ns) {
+                    w.vars.get_mut(res).unwrap().value = slot_ptr.into();
+                    let load_ty = bin.llvm_type(&elem_ty);
+                    bin.builder
+                        .build_load(load_ty, value.into_pointer_value(), "elem")
+                        .unwrap()
+                } else {
+                    w.vars.get_mut(res).unwrap().value = value;
+                    value
+                };
+                bin.builder.build_store(slot_ptr, value).unwrap();
+
+                // Update the len and size field of the vector struct
+                let len_ptr = unsafe {
+                    bin.builder
+                        .build_gep(
+                            llvm_ty,
+                            new,
+                            &[
+                                bin.context.i32_type().const_zero(),
+                                bin.context.i32_type().const_zero(),
+                            ],
+                            "len",
+                        )
+                        .unwrap()
+                };
+                bin.builder.build_store(len_ptr, new_len).unwrap();
+
+                let size_ptr = unsafe {
+                    bin.builder
+                        .build_gep(
+                            llvm_ty,
+                            new,
+                            &[
+                                bin.context.i32_type().const_zero(),
+                                bin.context.i32_type().const_int(1, false),
+                            ],
+                            "size",
+                        )
+                        .unwrap()
+                };
+                bin.builder.build_store(size_ptr, new_len).unwrap();
+            }
         }
         Instr::PopMemory {
             res,

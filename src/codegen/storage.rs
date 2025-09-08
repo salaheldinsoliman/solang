@@ -2,6 +2,7 @@
 
 use crate::codegen::Expression;
 use crate::sema::ast;
+use crate::Target;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -29,6 +30,12 @@ pub fn array_offset(
     elem_ty: Type,
     ns: &Namespace,
 ) -> Expression {
+    if ns.target == Target::Soroban {
+        // Soroban
+        println!("array start {:?}", start);
+        return start;
+    }
+
     let elem_size = elem_ty.storage_slots(ns);
     let slot_ty = ns.storage_type();
 

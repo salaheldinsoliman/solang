@@ -1402,18 +1402,33 @@ impl Type {
         match self {
             Type::Bool => false,
             Type::Address(_) => false,
-            Type::Int(_) => false,
-            Type::Uint(_) => false,
+            Type::Int(_) => 
+                
+                                if ns.target == Target::Soroban{
+                    true
+                } else {
+                
+                false},
+            Type::Uint(_) => 
+                
+                                if ns.target == Target::Soroban{
+                    true
+                } else {
+                
+                false},
             Type::Rational => false,
             Type::Bytes(_) => false,
             Type::Enum(_) => false,
             Type::Struct(_) => true,
-            Type::Array(_, dims) => !dims.contains(&ArrayLength::Dynamic),
+            Type::Array(_, dims) => {
+                
+
+                !dims.contains(&ArrayLength::Dynamic)},
             Type::DynamicBytes => false,
             Type::String => false,
             Type::Mapping(..) => false,
             Type::Contract(_) => false,
-            Type::Ref(_) => false,
+            Type::Ref(_) => {false},
             Type::StorageRef(..) => false,
             Type::InternalFunction { .. } => false,
             // On EVM, an external function is saved on an 256-bit register, so it is not
@@ -1952,6 +1967,11 @@ impl Type {
     /// Is it an address (with some sugar)
     pub fn is_address(&self) -> bool {
         matches!(self, Type::Address(_) | Type::Contract(_))
+    }
+
+    /// Is it an array (with some sugar)
+    pub fn is_array(&self) -> bool {
+        matches!(self, Type::Array(..))
     }
 
     /// Does the type contain any mapping type
