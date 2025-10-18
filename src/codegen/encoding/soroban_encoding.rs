@@ -559,8 +559,15 @@ pub fn soroban_encode_arg(
                 res: obj,
                 expr: encoded,
             }
+        },
+        Type::Struct(_) => {
+            Instr::Set {
+                    loc: Loc::Codegen,
+                    res: obj,
+                    expr: item.clone(),
+                }
         }
-        _ => todo!("Type not yet supported"),
+        _ => todo!("Type not yet supported {:?}", item),
     };
 
     cfg.add(vartab, ret);

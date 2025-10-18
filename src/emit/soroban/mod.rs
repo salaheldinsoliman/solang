@@ -296,6 +296,7 @@ impl SorobanTarget {
                             ast::Type::Bytes(_) => ScSpecTypeDef::Bytes,
                             ast::Type::String => ScSpecTypeDef::String,
                             ast::Type::Void => ScSpecTypeDef::Void,
+                            ast::Type::Struct(_) => ScSpecTypeDef::Void, // TODO: Map struct types.
                             _ => panic!("unsupported return type {ty:?}"),
                         }
                     }) // TODO: Map type.
