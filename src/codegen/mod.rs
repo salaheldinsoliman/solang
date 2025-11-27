@@ -99,12 +99,14 @@ pub enum HostFunctions {
     PutContractData,
     GetContractData,
     HasContractData,
+    DeleteContractData,
     ExtendContractDataTtl,
     ExtendCurrentContractInstanceAndCodeTtl,
     LogFromLinearMemory,
     SymbolNewFromLinearMemory,
     VectorNew,
     VectorNewFromLinearMemory,
+    VecLen,
     MapNewFromLinearMemory,
     Call,
     ObjToU64,
@@ -120,6 +122,9 @@ pub enum HostFunctions {
     MapNew,
     MapPut,
     VecPushBack,
+    VecPopBack,
+    VecGet,
+    VecPut,
     StringNewFromLinearMemory,
     StrKeyToAddr,
     GetCurrentContractAddress,
@@ -134,6 +139,7 @@ impl HostFunctions {
             HostFunctions::PutContractData => "l._",
             HostFunctions::GetContractData => "l.1",
             HostFunctions::HasContractData => "l.0",
+            HostFunctions::DeleteContractData => "l.2",
             HostFunctions::ExtendContractDataTtl => "l.7",
             HostFunctions::ExtendCurrentContractInstanceAndCodeTtl => "l.8",
             HostFunctions::LogFromLinearMemory => "x._",
@@ -161,6 +167,11 @@ impl HostFunctions {
             HostFunctions::BytesNewFromLinearMemory => "b.3",
             HostFunctions::BytesLen => "b.8",
             HostFunctions::BytesCopyToLinearMemory => "b.1",
+            HostFunctions::VecLen => "v.3",
+            HostFunctions::VecPopBack => "v.7",
+            HostFunctions::VecGet => "v.1",
+            HostFunctions::VecPut => "v.0",
+
         }
     }
 }
@@ -340,31 +351,63 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
     for layout in &ns.contracts[contract_no].layout {
         let var = &ns.contracts[layout.contract_no].variables[layout.var_no];
 
-        if let Some(init) = &var.initializer {
-            let storage = ns.contracts[contract_no].get_storage_slot(
-                pt::Loc::Codegen,
-                layout.contract_no,
-                layout.var_no,
-                ns,
-                None,
-            );
+        println!("Initializing storage variable {:?}", var);
 
-            let mut value = expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt);
+        let mut value = if let Some(init) = &var.initializer {
+            expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt)
+        } else {
+            if ns.target == Target::Soroban && var.ty.is_dynamic_memory() {
+                // on soroban we must initialize all storage variables
 
-            if ns.target == Target::Soroban {
-                value = soroban_encode_arg(value, &mut cfg, &mut vartab, ns);
-            }
+                let empty_vec_no = vartab.temp_name("soroban_vac", &var.ty);
 
-            cfg.add(
-                &mut vartab,
-                Instr::SetStorage {
-                    value,
+                let empty_vec_var = Expression::Variable {
+                    loc: var.loc,
                     ty: var.ty.clone(),
-                    storage,
-                    storage_type: var.storage_type.clone(),
-                },
-            );
+                    var_no: empty_vec_no,
+                };
+
+                let init_instr = Instr::Call {
+                    call: cfg::InternalCallTy::HostFunction {
+                        name: HostFunctions::VectorNew.name().to_string(),
+                    },
+                    args: vec![],
+                    return_tys: vec![var.ty.clone()],
+                    res: vec![empty_vec_no],
+                };
+
+                cfg.add(&mut vartab, init_instr);
+
+                empty_vec_var
+            } else {
+                continue;
+            }
+        };
+
+        let storage = ns.contracts[contract_no].get_storage_slot(
+            pt::Loc::Codegen,
+            layout.contract_no,
+            layout.var_no,
+            ns,
+            None,
+        );
+
+        //let mut value = expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt);
+
+        if ns.target == Target::Soroban {
+            value = soroban_encode_arg(value, &mut cfg, &mut vartab, ns);
         }
+
+        cfg.add(
+            &mut vartab,
+            Instr::SetStorage {
+                value,
+                ty: var.ty.clone(),
+                storage,
+                index: None,
+                storage_type: var.storage_type.clone(),
+            },
+        );
     }
 
     cfg.add(&mut vartab, Instr::Return { value: Vec::new() });

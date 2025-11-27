@@ -984,7 +984,11 @@ fn try_load_and_cast(
 ) -> Expression {
     match expr.ty() {
         Type::StorageRef(_, ty) => {
-            if let Expression::Subscript { array_ty, .. } = &expr {
+
+            let mut index = None;
+
+            if let Expression::Subscript { array_ty, index: index_expr, .. } = &expr {
+                index = Some(*index_expr.clone());
                 if array_ty.is_storage_bytes() {
                     return expr.cast(to_ty, ns);
                 }
@@ -1002,6 +1006,7 @@ fn try_load_and_cast(
                     res: anonymous_no,
                     ty: (*ty).clone(),
                     storage: expr.cast(to_ty, ns),
+                    index,
                     storage_type: None,
                 },
             );

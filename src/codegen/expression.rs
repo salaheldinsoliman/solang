@@ -16,6 +16,7 @@ use super::{polkadot, Options};
 use crate::codegen::array_boundary::handle_array_assign;
 use crate::codegen::constructor::call_constructor;
 use crate::codegen::events::new_event_emitter;
+use crate::codegen::storage::soroban_storage_push;
 use crate::codegen::unused_variable::should_remove_assignment;
 use crate::codegen::{Builtin, Expression, HostFunctions};
 use crate::sema::ast::ExternalCallAccounts;
@@ -62,6 +63,8 @@ pub fn expression(
         ast::Expression::StorageLoad { loc, ty, expr } => {
             let storage_type = storage_type(expr, ns);
             let storage = expression(expr, cfg, contract_no, func, ns, vartab, opt);
+
+        
 
             load_storage(loc, ty, storage, cfg, vartab, storage_type, ns)
         }
@@ -538,7 +541,7 @@ pub fn expression(
                 },
                 Type::Array(_, dim) => match dim.last().unwrap() {
                     ArrayLength::Dynamic => {
-                        if ns.target == Target::Solana {
+                        if ns.target == Target::Solana || ns.target == Target::Soroban {
                             Expression::StorageArrayLength {
                                 loc: *loc,
                                 ty: ty.clone(),
@@ -880,6 +883,9 @@ pub fn expression(
             args,
         } => {
             if args[0].ty().is_contract_storage() {
+                if ns.target == Target::Soroban {
+                    soroban_storage_push(loc, args, cfg, contract_no, func, ns, vartab, opt);
+                }
                 if ns.target == Target::Solana || args[0].ty().is_storage_bytes() {
                     array_push(loc, args, cfg, contract_no, func, ns, vartab, opt)
                 } else {
@@ -1370,6 +1376,7 @@ fn post_incdec(
                             ty: ty.clone(),
                             storage: dest,
                             storage_type,
+                            index: None,
                         },
                     );
                 }
@@ -1497,6 +1504,7 @@ fn pre_incdec(
                             value,
                             ty: ty.clone(),
                             storage: dest,
+                            index: None,
                             storage_type: storage_type.clone(),
                         },
                     );
@@ -2430,6 +2438,7 @@ fn expr_builtin(
                     ty: Type::Address(false),
                     storage: expr.clone(),
                     storage_type: None,
+                    index: None,
                 };
 
                 cfg.add(vartab, storage_load);
@@ -3228,12 +3237,13 @@ pub fn assign_single(
         }
         _ => {
             let left_ty = left.ty();
-            let ty = cfg_right.ty();
+            let mut ty = cfg_right.ty();
 
             let pos = vartab.temp_anonymous(&ty);
 
             // Set a subscript in storage bytes needs special handling
             let set_storage_bytes = if let ast::Expression::Subscript { array_ty, .. } = &left {
+                println!("inside set_storage_bytes");
                 array_ty.is_storage_bytes()
             } else {
                 false
@@ -3257,27 +3267,59 @@ pub fn assign_single(
                 Instr::Set {
                     loc: pt::Loc::Codegen,
                     res: pos,
-                    expr: cfg_right,
+                    expr: cfg_right.clone(),
                 },
             );
 
             let storage_type = storage_type(left, ns);
 
+            println!("left_ty early: {:?}", left_ty);
+            println!("dest early: {:?}", dest);
+            println!("set storage bytes: {:?}", set_storage_bytes);
+
             match left_ty {
                 Type::StorageRef(..) if set_storage_bytes => {
+                    println!("dest is {:?}", dest);
                     if let Expression::Subscript {
-                        expr: array, index, ..
+                        expr: array, index, ty: elem_ty, array_ty: arr_ty, ..
                     } = dest
                     {
+                        println!("inside set_storage_bytes match");
+
+                        println!("elem type: {:?}", elem_ty);
+
+                        println!("array type: {:?}", arr_ty);
+
+
+                        let mut value = Expression::Variable {
+                            loc: left.loc(),
+                            ty: ty.clone(),
+                            var_no: pos,
+                        };
+
+
+                        if ns.target == Target::Soroban {
+
+                          println!("left ty before soroban encode: {:?}", array.ty());
+
+                            value = Expression::Variable {
+                            loc: left.loc(),
+                            ty: array.ty(),
+                            var_no: pos,
+                            };
+
+
+                            value = soroban_encode_arg(value, cfg, vartab, ns);
+
+                            println!("soroban encoded value: {:?}", value);
+
+                        }
+
                         // Set a byte in a byte array
                         cfg.add(
                             vartab,
                             Instr::SetStorageBytes {
-                                value: Expression::Variable {
-                                    loc: left.loc(),
-                                    ty: ty.clone(),
-                                    var_no: pos,
-                                },
+                                value,
                                 storage: *array,
                                 offset: *index,
                             },
@@ -3304,6 +3346,7 @@ pub fn assign_single(
                             ty: ty.deref_any().clone(),
                             storage: dest,
                             storage_type,
+                            index: None,
                         },
                     );
                 }
@@ -3805,14 +3848,31 @@ fn array_subscript(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Expression {
+    println!("array ty in array_subscript: {:?}", array_ty);
     if array_ty.is_storage_bytes() {
-        return Expression::Subscript {
+        println!("inside array_subscript storage bytes");
+
+        let ret = 
+         Expression::Subscript {
             loc: *loc,
             ty: elem_ty.clone(),
             array_ty: array_ty.clone(),
             expr: Box::new(expression(array, cfg, contract_no, func, ns, vartab, opt)),
             index: Box::new(expression(index, cfg, contract_no, func, ns, vartab, opt)),
         };
+
+
+        return ret; 
+        /*return if ns.target == Target::Soroban {
+            let inner_ty = if let Type::Array( inner, _ ) = array_ty.deref_any() {
+                *inner.clone()
+            } else {
+                elem_ty.clone()
+            };
+            soroban_decode_arg(ret, cfg, vartab, ns, Some(inner_ty.clone()))
+        } else {
+             ret
+        };*/
     }
 
     if array_ty.is_mapping() {
@@ -3858,7 +3918,7 @@ fn array_subscript(
         Type::Array(..) => match array_ty.array_length() {
             None => {
                 if let Type::StorageRef(..) = array_ty {
-                    if ns.target == Target::Solana {
+                    if ns.target == Target::Solana || ns.target == Target::Soroban {
                         Expression::StorageArrayLength {
                             loc: *loc,
                             ty: ns.storage_type(),
@@ -4062,6 +4122,31 @@ fn array_subscript(
         let elem_ty = ty.storage_array_elem();
         let slot_ty = ns.storage_type();
 
+        if ns.target == Target::Soroban {
+
+            println!("soroban array subscript");
+
+            println!("array ty is {:?}", array_ty);
+
+            let index = index.cast(&Type::Uint(64), ns);
+
+            //let index_encoded = soroban_encode_arg(index, cfg, vartab, ns);
+
+            let val = 
+             Expression::Subscript {
+                loc: *loc,
+                ty: elem_ty.clone(),
+                array_ty: array_ty.clone(),
+                expr: Box::new(array),
+                index: Box::new(index),
+            };
+
+            println!("elem ty is {:?}", elem_ty);
+
+            return val;
+            //return soroban_decode_arg(val, cfg, vartab, ns, None);
+        }
+
         if ns.target == Target::Solana {
             if ty.array_length().is_some() && ty.is_sparse_solana(ns) {
                 let index = Expression::Variable {
@@ -4227,6 +4312,17 @@ pub fn load_storage(
 ) -> Expression {
     let res = vartab.temp_anonymous(ty);
 
+    println!("load_storage ty: {:?}", ty);
+    println!("load_storage storage expr: {:?}", storage);
+
+    let index_expr = if let Expression::Subscript { loc, ty, array_ty, expr, index } = storage.clone() {
+
+        Some(*index)
+    }
+    else {
+       None
+    };
+
     cfg.add(
         vartab,
         Instr::LoadStorage {
@@ -4234,6 +4330,7 @@ pub fn load_storage(
             ty: ty.clone(),
             storage,
             storage_type: storage_type.clone(),
+            index: index_expr,
         },
     );
 

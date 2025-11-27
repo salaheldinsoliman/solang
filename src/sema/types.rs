@@ -1935,7 +1935,13 @@ impl Type {
             if let Type::DynamicBytes = ty.as_ref() {
                 return true;
             }
+
+            /*if let Type::Array( _, ty) = ty.as_ref() {
+                return true;
+            }*/
         }
+
+        println!("check storage bytes: {:?}", self);
 
         false
     }

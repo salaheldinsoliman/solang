@@ -85,6 +85,7 @@ pub trait TargetRuntime<'a> {
         slot: &mut IntValue<'a>,
         function: FunctionValue<'a>,
         storage_type: &Option<StorageType>,
+        index: Option<IntValue<'a>>,
     ) -> BasicValueEnum<'a>;
 
     /// Recursively store a type to storage

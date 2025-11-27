@@ -113,11 +113,18 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             ty,
             storage,
             storage_type,
+            index
         } => {
             let mut slot = expression(target, bin, storage, &w.vars, function).into_int_value();
 
+            let index = if let Some(index_expr) = index {
+                Some(expression(target, bin, index_expr, &w.vars, function).into_int_value())
+            } else {
+                None
+            };
+
             w.vars.get_mut(res).unwrap().value =
-                target.storage_load(bin, ty, &mut slot, function, storage_type);
+                target.storage_load(bin, ty, &mut slot, function, storage_type, index);
         }
         Instr::ClearStorage { ty, storage } => {
             let mut slot = expression(target, bin, storage, &w.vars, function).into_int_value();
@@ -129,10 +136,21 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             value,
             storage,
             storage_type,
+            index
         } => {
+
+
+            println!("SetStorage with type {:?}", ty);
+            println!("storage expr {:?}", storage);
+            println!("value expr {:?}", value);
+
+            
+
+
             let value = expression(target, bin, value, &w.vars, function);
 
             let mut slot = expression(target, bin, storage, &w.vars, function).into_int_value();
+
 
             target.storage_store(bin, ty, true, &mut slot, value, function, storage_type);
         }
@@ -141,6 +159,11 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             value,
             offset,
         } => {
+
+            println!("SetStorageBytes called with storage {:?}", storage);
+            println!("SetStorageBytes called with offset {:?}", offset);
+            println!("SetStorageBytes called with value {:?}", value);
+
             let index_loc = offset.loc();
             let value = expression(target, bin, value, &w.vars, function);
 

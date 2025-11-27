@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::codegen::HostFunctions;
+use crate::codegen::cfg::InternalCallTy;
+use crate::codegen::encoding::soroban_encoding::soroban_encode_arg;
 use crate::codegen::Expression;
 use crate::sema::ast;
+use crate::Target;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
 use num_traits::One;
@@ -92,6 +96,11 @@ pub fn storage_slots_array_push(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Expression {
+
+    if ns.target == Target::Soroban {
+        return soroban_storage_push(loc, args, cfg, contract_no, func, ns, vartab, opt);
+    }
+
     // set array+length to val_expr
     let slot_ty = ns.storage_type();
     let length_pos = vartab.temp_anonymous(&slot_ty);
@@ -114,31 +123,55 @@ pub fn storage_slots_array_push(
 
     let entry_pos = vartab.temp_anonymous(&slot_ty);
 
+    let array_offset = if ns.target == Target::Soroban {
+        let index = Expression::Variable {
+            loc: *loc,
+            ty: slot_ty.clone(),
+            var_no: length_pos,
+        };
+
+        let index_encoded = soroban_encode_arg(index, cfg, vartab, ns);
+
+        Expression::Subscript {
+            loc: *loc,
+            ty: elem_ty.clone(),
+            array_ty: Type::StorageRef(false, Box::new(elem_ty.clone())),
+            expr: Box::new(var_expr.clone()),
+            index: Box::new(index_encoded),
+        }
+    } else {
+        array_offset(
+            loc,
+            Expression::Keccak256 {
+                loc: *loc,
+                ty: slot_ty.clone(),
+                exprs: vec![var_expr.clone()],
+            },
+            Expression::Variable {
+                loc: *loc,
+                ty: slot_ty.clone(),
+                var_no: length_pos,
+            },
+            elem_ty.clone(),
+            ns,
+        )
+    };
+
     cfg.add(
         vartab,
         Instr::Set {
             loc: pt::Loc::Codegen,
             res: entry_pos,
-            expr: array_offset(
-                loc,
-                Expression::Keccak256 {
-                    loc: *loc,
-                    ty: slot_ty.clone(),
-                    exprs: vec![var_expr.clone()],
-                },
-                Expression::Variable {
-                    loc: *loc,
-                    ty: slot_ty.clone(),
-                    var_no: length_pos,
-                },
-                elem_ty.clone(),
-                ns,
-            ),
+            expr: array_offset,
         },
     );
 
     if args.len() == 2 {
-        let value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
+        let mut value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
+
+        if ns.target == Target::Soroban {
+            value = soroban_encode_arg(value, cfg, vartab, ns);
+        }
 
         cfg.add(
             vartab,
@@ -150,13 +183,14 @@ pub fn storage_slots_array_push(
                     ty: slot_ty.clone(),
                     var_no: entry_pos,
                 },
+                index: None,
                 storage_type: None,
             },
         );
     }
 
     // increase length
-    let new_length = Expression::Add {
+    let mut new_length = Expression::Add {
         loc: *loc,
         ty: slot_ty.clone(),
         overflowing: true,
@@ -172,6 +206,10 @@ pub fn storage_slots_array_push(
         }),
     };
 
+    if ns.target == Target::Soroban {
+        new_length = soroban_encode_arg(new_length, cfg, vartab, ns);
+    }
+
     cfg.add(
         vartab,
         Instr::SetStorage {
@@ -179,6 +217,7 @@ pub fn storage_slots_array_push(
             value: new_length,
             storage: var_expr,
             storage_type: None,
+            index: None,
         },
     );
 
@@ -193,6 +232,140 @@ pub fn storage_slots_array_push(
     }
 }
 
+
+pub fn soroban_storage_push ( 
+    loc: &pt::Loc,
+    args: &[ast::Expression],
+    cfg: &mut ControlFlowGraph,
+    contract_no: usize,
+    func: Option<&Function>,
+    ns: &Namespace,
+    vartab: &mut Vartable,
+    opt: &Options,
+) -> Expression {
+
+    println!("soroban storage push called");
+
+
+    // in soroban, we can use the VecPush host function directly
+    // we need to load the vec object from storage first, then call VecPush on it
+
+    let var_expr = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+    let value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
+
+    //let entry_pos = vartab.temp_anonymous(&ns.storage_type());
+
+    let value_encoded = soroban_encode_arg(value, cfg, vartab, ns);
+
+    println!("var expr: {:?}", var_expr);
+    println!("args[1] ty: {:?}", args[1].ty());
+
+    // load the vec object from storage
+    let old_vec_obj = load_storage(loc, &args[0].ty(), var_expr.clone(), cfg, vartab, None, ns);
+
+    
+    let new_vec_no = vartab.temp_name("soroban_vec_push", &args[0].ty());
+
+    let new_vec_var = Expression::Variable {
+        loc: *loc,
+        ty: args[0].ty().clone(),
+        var_no: new_vec_no,
+    };
+
+
+    // call the soroban VecPush host function
+    let intsr = Instr::Call { res: vec![new_vec_no]
+        , return_tys: vec![args[0].ty().clone()], call: InternalCallTy::HostFunction { name: HostFunctions::VecPushBack.name().to_string() }, args: vec![old_vec_obj, value_encoded] };
+
+    cfg.add(vartab, intsr);
+
+
+    
+
+    // store the updated vec object back to storage
+    let store_instr = Instr::SetStorage {
+        ty: args[0].ty().clone(),
+        value: new_vec_var.clone(),
+        storage: var_expr.clone(),
+        storage_type: None,
+        index: None,
+    };
+
+    cfg.add(vartab, store_instr);
+
+
+
+    var_expr
+
+
+    //unimplemented!()
+}
+
+
+fn soroban_storage_pop ( 
+    loc: &pt::Loc,
+    args: &[ast::Expression],
+    return_ty: &Type,
+    cfg: &mut ControlFlowGraph,
+    contract_no: usize,
+    func: Option<&Function>,
+    ns: &Namespace,
+    vartab: &mut Vartable,
+    opt: &Options,
+) -> Expression { 
+
+    // in soroban, we can use the VecPop host function directly
+    // we need to load the vec object from storage first, then call VecPush on it
+
+    let var_expr = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
+    
+
+    // load the vec object from storage
+    let old_vec_obj = load_storage(loc, &args[0].ty(), var_expr.clone(), cfg, vartab, None, ns);
+
+    
+    let new_vec_no = vartab.temp_name("soroban_vec_push", &args[0].ty());
+
+    let new_vec_var = Expression::Variable {
+        loc: *loc,
+        ty: args[0].ty().clone(),
+        var_no: new_vec_no,
+    };
+
+
+    // call the soroban VecPush host function
+    let intsr = Instr::Call { res: vec![new_vec_no]
+        , return_tys: vec![args[0].ty().clone()], call: InternalCallTy::HostFunction { name: HostFunctions::VecPopBack.name().to_string() }, args: vec![old_vec_obj] };
+
+    cfg.add(vartab, intsr);
+
+
+
+    // store the updated vec object back to storage
+    let store_instr = Instr::SetStorage {
+        ty: args[0].ty().clone(),
+        value: new_vec_var.clone(),
+        storage: var_expr.clone(),
+        storage_type: None,
+        index: None,
+    };
+
+    cfg.add(vartab, store_instr);
+
+
+
+    //var_expr
+
+    Expression::Variable {
+        loc: *loc,
+        ty: return_ty.clone(),
+        var_no: new_vec_no,
+    }
+
+
+
+}
+
 /// Pop() method on dynamic array in storage
 pub fn storage_slots_array_pop(
     loc: &pt::Loc,
@@ -205,6 +378,13 @@ pub fn storage_slots_array_pop(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Expression {
+
+
+    if ns.target == Target::Soroban {
+        return soroban_storage_pop(loc, args, return_ty, cfg, contract_no, func, ns, vartab, opt);
+    }
+
+
     // set array+length to val_expr
     let slot_ty = ns.storage_type();
     let length_ty = ns.storage_type();
@@ -263,26 +443,32 @@ pub fn storage_slots_array_pop(
     cfg.set_basic_block(has_elements);
     let new_length = vartab.temp_anonymous(&slot_ty);
 
+    let mut subtract = Expression::Subtract {
+        loc: *loc,
+        ty: length_ty.clone(),
+        overflowing: true,
+        left: Box::new(Expression::Variable {
+            loc: *loc,
+            ty: length_ty.clone(),
+            var_no: length_pos,
+        }),
+        right: Box::new(Expression::NumberLiteral {
+            loc: *loc,
+            ty: length_ty.clone(),
+            value: BigInt::one(),
+        }),
+    };
+
+    if ns.target == Target::Soroban {
+        subtract = soroban_encode_arg(subtract, cfg, vartab, ns);
+    }
+
     cfg.add(
         vartab,
         Instr::Set {
             loc: pt::Loc::Codegen,
             res: new_length,
-            expr: Expression::Subtract {
-                loc: *loc,
-                ty: length_ty.clone(),
-                overflowing: true,
-                left: Box::new(Expression::Variable {
-                    loc: *loc,
-                    ty: length_ty.clone(),
-                    var_no: length_pos,
-                }),
-                right: Box::new(Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: length_ty,
-                    value: BigInt::one(),
-                }),
-            },
+            expr: subtract,
         },
     );
 
@@ -291,26 +477,46 @@ pub fn storage_slots_array_pop(
     let elem_ty = ty.storage_array_elem().deref_any().clone();
     let entry_pos = vartab.temp_anonymous(&slot_ty);
 
+    let array_offset_expr = if ns.target == Target::Soroban {
+        let index = Expression::Variable {
+            loc: *loc,
+            ty: slot_ty.clone(),
+            var_no: length_pos,
+        };
+
+        let index_encoded = soroban_encode_arg(index, cfg, vartab, ns);
+
+        Expression::Subscript {
+            loc: *loc,
+            ty: elem_ty.clone(),
+            array_ty: Type::StorageRef(false, Box::new(elem_ty.clone())),
+            expr: Box::new(var_expr.clone()),
+            index: Box::new(index_encoded),
+        }
+    } else {
+        array_offset(
+            loc,
+            Expression::Keccak256 {
+                loc: *loc,
+                ty: slot_ty.clone(),
+                exprs: vec![var_expr.clone()],
+            },
+            Expression::Variable {
+                loc: *loc,
+                ty: slot_ty.clone(),
+                var_no: new_length,
+            },
+            elem_ty.clone(),
+            ns,
+        )
+    };
+
     cfg.add(
         vartab,
         Instr::Set {
             loc: pt::Loc::Codegen,
             res: entry_pos,
-            expr: array_offset(
-                loc,
-                Expression::Keccak256 {
-                    loc: *loc,
-                    ty: slot_ty.clone(),
-                    exprs: vec![var_expr.clone()],
-                },
-                Expression::Variable {
-                    loc: *loc,
-                    ty: slot_ty.clone(),
-                    var_no: new_length,
-                },
-                elem_ty.clone(),
-                ns,
-            ),
+            expr: array_offset_expr,
         },
     );
 
@@ -373,7 +579,9 @@ pub fn storage_slots_array_pop(
                 var_no: new_length,
             },
             storage: var_expr,
+            index: None,
             storage_type: None,
+
         },
     );
 
@@ -391,6 +599,11 @@ pub fn array_push(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Expression {
+
+    if ns.target == Target::Soroban {
+        return soroban_storage_push(loc, args, cfg, contract_no, func, ns, vartab, opt);
+    }
+
     let storage = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
 
     let mut ty = args[0].ty().storage_array_elem();

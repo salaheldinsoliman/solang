@@ -44,7 +44,13 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         slot: &mut IntValue<'a>,
         function: FunctionValue<'a>,
         storage_type: &Option<StorageType>,
+        index: Option<IntValue<'a>>,
     ) -> BasicValueEnum<'a> {
+
+        println!("storage_load called for slot: {:?}", slot);
+        print!("storage_load called for type: {:?}\n", ty);
+        println!("storage_load called for index: {:?}\n", index);
+
         let storage_type = storage_type_to_int(storage_type);
         emit_context!(bin);
 
@@ -137,6 +143,10 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         function: FunctionValue<'a>,
         storage_type: &Option<StorageType>,
     ) {
+
+        println!("storage_store called for type: {:?}", ty);
+        println!("storage_store called for dest: {:?}", dest);
+
         emit_context!(bin);
 
         let storage_type = storage_type_to_int(storage_type);
@@ -153,9 +163,18 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
             *slot
         };
 
+
         // In case of struct, we receive a buffer in that format: [ field1, field2, ... ] where each field is a Soroban tagged value of type i64
         // therefore, for each field, we need to extract it from the buffer and call PutContractData for each field separately
-        if let Type::Struct(ast::StructType::UserDefined(n)) = ty {
+
+        // This check is added to handle the case we are stroing a struct in storage
+        let inner_ty = if let Type::StorageRef(mutable, inner) = ty {
+            inner
+        } else {
+            ty
+        };
+
+        if let Type::Struct(ast::StructType::UserDefined(n)) = inner_ty {
             let field_count = &bin.ns.structs[*n].fields.len();
 
             let data_ptr = bin.vector_bytes(dest);
@@ -198,7 +217,23 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         slot: &mut IntValue<'a>,
         function: FunctionValue<'a>,
     ) {
-        unimplemented!()
+        let storage_type = storage_type_to_int(&None);
+
+        let type_int = bin.context.i64_type().const_int(storage_type, false);
+
+        let function_value = bin
+            .module
+            .get_function(HostFunctions::DeleteContractData.name())
+            .unwrap();
+
+        let call = bin
+            .builder
+            .build_call(
+                function_value,
+                &[slot.as_basic_value_enum().into(), type_int.into()],
+                "del_contract_data",
+            )
+            .unwrap();
     }
 
     // Bytes and string have special storage layout
@@ -249,7 +284,67 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         index: IntValue<'a>,
         loc: Loc,
     ) -> IntValue<'a> {
-        unimplemented!()
+
+
+        println!("get_storage_bytes_subscript called");
+        println!("slot: {:?}", slot);
+        println!("index: {:?}", index);
+        println!("loc: {:?}", loc);
+
+
+        // load the array object from storage
+
+        let load_storage = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::GetContractData.name())
+                    .unwrap(),
+                &[
+                    slot.into(),
+                    bin.context.i64_type().const_int(1, false).into(), // persistent storage
+                ],
+                "load_storage",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+
+        let index_encoded = encode_value(
+            if index.get_type().get_bit_width() == 64 {
+                index
+            } else {
+                bin.builder
+                    .build_int_z_extend(index, bin.context.i64_type(), "index64")
+                    .unwrap()
+            },
+            32,
+            4,
+            bin,
+        );
+
+        let res = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::VecGet.name())
+                    .unwrap(),
+                &[
+                    load_storage.into(),
+                    index_encoded.into(),
+                ],
+                "vec_get",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+        res
     }
 
     fn set_storage_bytes_subscript(
@@ -261,7 +356,84 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         value: IntValue<'a>,
         loc: Loc,
     ) {
-        unimplemented!()
+
+
+        // load the array object from storage
+        let load_storage = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::GetContractData.name())
+                    .unwrap(),
+                &[
+                    slot.into(),
+                    bin.context.i64_type().const_int(1, false).into(), // persistent storage
+                ],
+                "load_storage",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+
+        // encode the index as u32 val
+        let index_encoded = encode_value(
+            if index.get_type().get_bit_width() == 64 {
+                index
+            } else {
+                bin.builder
+                    .build_int_z_extend(index, bin.context.i64_type(), "index64")
+                    .unwrap()
+            },
+            32,
+            4,
+            bin,
+        );
+
+        // the value is already encoded as u32 val, so we can use it directly.
+        // call VecPut
+        let res = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::VecPut.name())
+                    .unwrap(),
+                &[
+                    load_storage.into(),
+                    index_encoded.into(),
+                    value.into(),
+                ],
+                "vec_put",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+
+        // store the array object back to storage
+        let _store_storage = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::PutContractData.name())
+                    .unwrap(),
+                &[
+                    slot.into(),
+                    res.into(),
+                    bin.context.i64_type().const_int(1, false).into(), // persistent storage
+                ],
+                "store_storage",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
     }
 
     fn storage_subscript(
@@ -272,6 +444,23 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         slot: IntValue<'a>,
         index: BasicValueEnum<'a>,
     ) -> IntValue<'a> {
+
+        println!("storage_subscript called with type: {:?}", ty);
+
+ /*        if let Type::StorageRef( _, inner ) = ty {
+            if let Type::Array( _, _) = **inner {
+                
+                
+                // here, just return a struct of (slot, index)
+
+               
+                
+            }
+        }
+        */
+       
+
+
         let vec_new = bin
             .builder
             .build_call(
@@ -358,12 +547,64 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
     fn storage_array_length(
         &self,
-        _bin: &Binary<'a>,
+        bin: &Binary<'a>,
         _function: FunctionValue,
-        _slot: IntValue<'a>,
+        slot: IntValue<'a>,
         _elem_ty: &Type,
     ) -> IntValue<'a> {
-        unimplemented!()
+
+
+        // we should first load the array object from storage, then call VecLen on it
+
+        let load_storage = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::GetContractData.name())
+                    .unwrap(),
+                &[
+                    slot.into(),
+                    bin.context.i64_type().const_int(1, false).into(), // persistent storage
+                ],
+                "load_storage",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+
+
+       let u32_val = bin
+            .builder
+            .build_call(
+                bin.module
+                    .get_function(HostFunctions::VecLen.name())
+                    .unwrap(),
+                &[load_storage.into()],
+                "vec_len",
+            )
+            .unwrap()
+            .try_as_basic_value()
+            .left()
+            .unwrap()
+            .into_int_value();
+
+        // decode U32Val to get the actual length, shift right by 32
+        let length = bin
+            .builder
+            .build_right_shift(
+                u32_val,
+                bin.context.i64_type().const_int(32, false),
+                false,
+                "length",
+            )
+            .unwrap();
+        length
+
+
+        
     }
 
     /// keccak256 hash

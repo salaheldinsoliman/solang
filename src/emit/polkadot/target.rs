@@ -1442,6 +1442,7 @@ impl<'a> TargetRuntime<'a> for PolkadotTarget {
         slot: &mut IntValue<'a>,
         function: FunctionValue,
         _storage_type: &Option<StorageType>,
+        _index: Option<IntValue<'a>>,
     ) -> BasicValueEnum<'a> {
         // The storage slot is an i256 accessed through a pointer, so we need
         // to store it

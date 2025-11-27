@@ -38,6 +38,11 @@ impl HostFunctions {
                 .context
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into()], false),
+
+            HostFunctions::DeleteContractData => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into()], false),
             // https://github.com/stellar/stellar-protocol/blob/2fdc77302715bc4a31a784aef1a797d466965024/core/cap-0046-03.md#ledger-host-functions-mod-l
             // ;; If the entry's TTL is below `threshold` ledgers, extend `live_until_ledger_seq` such that TTL == `extend_to`, where TTL is defined as live_until_ledger_seq - current ledger.
             // (func $extend_contract_data_ttl (param $k_val i64) (param $t_storage_type i64) (param $threshold_u32_val i64) (param $extend_to_u32_val i64) (result i64))
@@ -60,6 +65,16 @@ impl HostFunctions {
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into()], false),
             HostFunctions::VectorNew => bin.context.i64_type().fn_type(&[], false),
+            HostFunctions::VecPopBack => bin.context.i64_type().fn_type(&[ty.into()], false),
+            HostFunctions::VecGet => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into()], false),
+
+            HostFunctions::VecPut=> bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into(), ty.into()], false),
             HostFunctions::Call => bin
                 .context
                 .i64_type()
@@ -90,6 +105,11 @@ impl HostFunctions {
                 .context
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into()], false),
+
+            HostFunctions::VecLen => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into()], false),
 
             HostFunctions::StringNewFromLinearMemory => bin
                 .context
@@ -349,6 +369,7 @@ impl SorobanTarget {
             HostFunctions::PutContractData,
             HostFunctions::GetContractData,
             HostFunctions::HasContractData,
+            HostFunctions::DeleteContractData,
             HostFunctions::ExtendContractDataTtl,
             HostFunctions::ExtendCurrentContractInstanceAndCodeTtl,
             HostFunctions::LogFromLinearMemory,
@@ -371,11 +392,15 @@ impl SorobanTarget {
             HostFunctions::MapNew,
             HostFunctions::MapPut,
             HostFunctions::VecPushBack,
+            HostFunctions::VecGet,
+            HostFunctions::VecPut,
             HostFunctions::StringNewFromLinearMemory,
             HostFunctions::StrKeyToAddr,
             HostFunctions::GetCurrentContractAddress,
             HostFunctions::BytesNewFromLinearMemory,
             HostFunctions::BytesCopyToLinearMemory,
+            HostFunctions::VecLen,
+            HostFunctions::VecPopBack,
         ];
 
         for func in &host_functions {

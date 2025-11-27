@@ -639,6 +639,7 @@ pub(super) fn solana_deploy(
                 ty: Type::Uint(64),
                 value: BigInt::zero(),
             },
+            index: None,
             storage_type: None,
         },
     );
@@ -664,6 +665,7 @@ pub(super) fn solana_deploy(
                 ty: Type::Uint(64),
                 value: BigInt::from(12),
             },
+            index: None,
             storage_type: None,
         },
     );

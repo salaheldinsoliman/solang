@@ -272,11 +272,13 @@ impl<'a, 'b: 'a> AvailableExpressionSet<'a> {
                 ty,
                 storage,
                 storage_type,
+                index
             } => Instr::LoadStorage {
                 res: *res,
                 ty: ty.clone(),
                 storage: self.regenerate_expression(storage, ave, cst).1,
                 storage_type: storage_type.clone(),
+                index: index.clone(),
             },
 
             Instr::ClearStorage { ty, storage } => Instr::ClearStorage {
@@ -289,11 +291,13 @@ impl<'a, 'b: 'a> AvailableExpressionSet<'a> {
                 value,
                 storage,
                 storage_type,
+                index
             } => Instr::SetStorage {
                 ty: ty.clone(),
                 value: self.regenerate_expression(value, ave, cst).1,
                 storage: self.regenerate_expression(storage, ave, cst).1,
                 storage_type: storage_type.clone(),
+                index: index.clone(),
             },
 
             Instr::SetStorageBytes {

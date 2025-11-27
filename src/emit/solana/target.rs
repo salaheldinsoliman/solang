@@ -480,7 +480,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
         let mut old_elem_offset = bin.builder.build_int_add(offset, new_length, "").unwrap();
 
         let val = if load {
-            Some(self.storage_load(bin, ty, &mut old_elem_offset, function, &None))
+            Some(self.storage_load(bin, ty, &mut old_elem_offset, function, &None, None))
         } else {
             None
         };
@@ -570,6 +570,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
         slot: &mut IntValue<'a>,
         function: FunctionValue<'a>,
         _storage_type: &Option<StorageType>,
+        _index: Option<IntValue<'a>>,
     ) -> BasicValueEnum<'a> {
         let data = self.contract_storage_data(bin);
 
@@ -661,7 +662,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
                         )
                         .unwrap();
 
-                    let val = self.storage_load(bin, &field.ty, &mut offset, function, &None);
+                    let val = self.storage_load(bin, &field.ty, &mut offset, function, &None, None);
 
                     let elem = unsafe {
                         bin.builder
@@ -774,6 +775,7 @@ impl<'a> TargetRuntime<'a> for SolanaTarget {
                     &mut offset_val,
                     function,
                     &None,
+                    None
                 );
 
                 let val = if elem_ty.deref_memory().is_fixed_reference_type(bin.ns) {

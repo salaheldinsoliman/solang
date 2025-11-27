@@ -70,6 +70,7 @@ pub enum Instr {
         res: usize,
         ty: Type,
         storage: Expression,
+        index: Option<Expression>,
         storage_type: Option<pt::StorageType>,
     },
     /// Clear storage at slot for ty (might span multiple slots)
@@ -79,6 +80,7 @@ pub enum Instr {
         ty: Type,
         value: Expression,
         storage: Expression,
+        index: Option<Expression>,
         storage_type: Option<pt::StorageType>,
     },
     /// In storage slot, set the value at the offset

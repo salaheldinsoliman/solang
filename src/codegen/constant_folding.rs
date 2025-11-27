@@ -133,7 +133,9 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                     ty,
                     storage,
                     value,
+                    index,
                     storage_type,
+
                 } => {
                     let (storage, _) = expression(storage, Some(&vars), cfg, ns);
                     let (value, _) = expression(value, Some(&vars), cfg, ns);
@@ -143,6 +145,7 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                             ty: ty.clone(),
                             storage,
                             value,
+                            index: index.clone(),
                             storage_type: storage_type.clone(),
                         };
                     }
@@ -152,6 +155,7 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                     storage,
                     res,
                     storage_type,
+                    index,
                 } => {
                     let (storage, _) = expression(storage, Some(&vars), cfg, ns);
 
@@ -161,6 +165,7 @@ pub fn constant_folding(cfg: &mut ControlFlowGraph, dry_run: bool, ns: &mut Name
                             storage,
                             res: *res,
                             storage_type: storage_type.clone(),
+                            index: index.clone(),
                         };
                     }
                 }

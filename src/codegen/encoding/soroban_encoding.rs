@@ -120,7 +120,13 @@ pub fn soroban_decode_arg(
         None => {
             if let Type::Ref(inner_ty) = arg.ty() {
                 *inner_ty
+            } else if let Type::StorageRef(_, inner) = arg.ty() {
+                *inner
+
+
             } else {
+
+
                 arg.ty()
             }
         }
@@ -198,9 +204,10 @@ pub fn soroban_decode_arg(
         },
         Type::Struct(StructType::UserDefined(n)) => {
             decode_struct(arg, wrapper_cfg, vartab, n, ns, ty)
-        }
+        },
+        Type::Array(_, _) => arg.clone(),
 
-        _ => unimplemented!(),
+        _ => unimplemented!("ty is {:?} in soroban decoder", ty),
     }
 }
 
@@ -578,7 +585,15 @@ pub fn soroban_encode_arg(
                 res: obj,
                 expr: buf,
             }
+        },
+        Type::Array(_,_ ) => {
+            Instr::Set {
+                    loc: Loc::Codegen,
+                    res: obj,
+                    expr: item.clone(),
+                }
         }
+
         _ => todo!("Type not yet supported in soroban encoder: {:?}", item.ty()),
     };
 
