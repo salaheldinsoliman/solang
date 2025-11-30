@@ -925,7 +925,7 @@ impl<'a> Binary<'a> {
     /// Return the llvm type for the resolved type.
     pub(crate) fn llvm_type(&self, ty: &Type) -> BasicTypeEnum<'a> {
         emit_context!(self);
-        if ty.is_builtin_struct() == Some(StructType::AccountInfo) {
+        let res = if ty.is_builtin_struct() == Some(StructType::AccountInfo) {
             self.context
                 .struct_type(
                     &[
@@ -954,6 +954,8 @@ impl<'a> Binary<'a> {
                 ),
                 Type::Contract(_) | Type::Address(_) => {
                     // Soroban addresses are 64 bit wide integer that represents a refrenece for the real Address on the Host side.
+
+                    //BasicTypeEnum::ArrayType(self.address_type())
                     if self.ns.target == Target::Soroban {
                         BasicTypeEnum::IntType(self.context.i64_type())
                     } else {
@@ -972,6 +974,11 @@ impl<'a> Binary<'a> {
                     }
                 }
                 Type::Array(base_ty, dims) => {
+
+                    if self.ns.target == Target::Soroban {
+                        return BasicTypeEnum::PointerType(self.context.ptr_type(AddressSpace::default()));
+                    }
+
                     dims.iter()
                         .fold(self.llvm_field_ty(base_ty), |aty, dim| match dim {
                             ArrayLength::Fixed(d) => aty.array_type(d.to_u32().unwrap()).into(),
@@ -1048,7 +1055,11 @@ impl<'a> Binary<'a> {
                 }
                 _ => unreachable!(),
             }
-        }
+        };
+
+
+
+        res
     }
 
     /// Allocate vector

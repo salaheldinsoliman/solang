@@ -1109,10 +1109,16 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
 
                 let llvm_ty = bin.llvm_type(ty.deref_memory());
 
+                let allocator = if bin.ns.target == Target::Soroban {
+                "soroban_malloc"
+            } else {
+                "__malloc"
+            };
+
                 let new_struct = bin
                     .builder
                     .build_call(
-                        bin.module.get_function("__malloc").unwrap(),
+                        bin.module.get_function(allocator).unwrap(),
                         &[llvm_ty
                             .size_of()
                             .unwrap()

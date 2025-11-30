@@ -130,6 +130,9 @@ pub(super) fn process_instruction<'a, T: TargetRuntime<'a> + ?Sized>(
             storage,
             storage_type,
         } => {
+
+            println!("SetStorage called with value {:?}, storage_type {:?}", value, ty);
+
             let value = expression(target, bin, value, &w.vars, function);
 
             let mut slot = expression(target, bin, storage, &w.vars, function).into_int_value();

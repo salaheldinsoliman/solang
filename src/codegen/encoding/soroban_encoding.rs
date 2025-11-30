@@ -198,9 +198,74 @@ pub fn soroban_decode_arg(
         },
         Type::Struct(StructType::UserDefined(n)) => {
             decode_struct(arg, wrapper_cfg, vartab, n, ns, ty)
-        }
+        },
 
-        _ => unimplemented!(),
+        Type::Array( _, _) => { 
+
+
+            decode_vec_object(arg, wrapper_cfg, vartab, ns)
+            //arg.clone()
+
+     /*   println!("arg: {:?}", arg);
+
+    // first get the len of the array by calling the host function VecLen
+
+    let vec_len_no = vartab.temp_name("vec_len", &Type::Uint(64));
+
+    let vec_len = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: Type::Uint(64),
+        var_no: vec_len_no,
+    };
+
+    let get_len_instr = Instr::Call {
+        res: vec![vec_len_no],
+        return_tys: vec![Type::Uint(64)],
+        call: crate::codegen::cfg::InternalCallTy::HostFunction {
+            name: HostFunctions::VecLen.name().to_string(),
+        },
+        args: vec![arg.clone()],
+    };
+
+    wrapper_cfg.add(vartab, get_len_instr);
+
+
+    vec_len
+    */
+
+/* 
+
+    
+    
+
+
+    let encoded_bytes = vartab.temp_name("abi_encoded", &Type::DynamicBytes);
+
+    let expr = Expression::AllocDynamicBytes {
+        loc: Loc::Codegen,
+        ty: Type::DynamicBytes,
+        size: size_expr.clone().into(),
+        initializer: None,
+    };
+
+    wrapper_cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: encoded_bytes,
+            expr,
+        },
+    );
+
+    expr*/
+
+            // we get the vecobject and copy it to memory:
+            
+
+        }
+       
+
+        _ => unimplemented!("Type not yet supported in soroban decoder: {:?}", ty),
     }
 }
 
@@ -578,6 +643,14 @@ pub fn soroban_encode_arg(
                 res: obj,
                 expr: buf,
             }
+        }
+
+        Type::Array( _, _) => { 
+            Instr::Set {
+                    loc: Loc::Codegen,
+                    res: obj,
+                    expr: item.clone(),
+                }
         }
         _ => todo!("Type not yet supported in soroban encoder: {:?}", item.ty()),
     };
@@ -970,6 +1043,100 @@ fn encode_struct(
 
     ret.0
 }
+
+/// Decode a VecObject by copying the elements into memory and returning a pointer to the memory.
+
+fn decode_vec_object(
+    arg: Expression,
+    wrapper_cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+    ns: &Namespace,
+) -> Expression {
+
+// First get the length of the vec by calling the host function VecLen
+ let vec_len_no = vartab.temp_name("vec_len", &Type::Uint(64));
+
+    let vec_len = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: Type::Uint(64),
+        var_no: vec_len_no,
+    };
+
+    let get_len_instr = Instr::Call {
+        res: vec![vec_len_no],
+        return_tys: vec![Type::Uint(64)],
+        call: crate::codegen::cfg::InternalCallTy::HostFunction {
+            name: HostFunctions::VecLen.name().to_string(),
+        },
+        args: vec![arg.clone()],
+    };
+
+    let decoded_length = soroban_decode_arg(vec_len.clone(), wrapper_cfg, vartab, ns, Some(Type::Uint(32)));
+
+    wrapper_cfg.add(vartab, get_len_instr);
+
+
+    // Make a call for VecUnpackToLinearMemory to copy the vec contents into memory
+
+    //let bytes = vartab.temp_name("vec_bytes", &Type::DynamicBytes);
+
+
+
+
+    //////////////////////////////////////////////////////////////////////
+
+    let encoded_bytes = vartab.temp_name("abi_encoded", &Type::DynamicBytes);
+
+
+
+    let expr = Expression::AllocDynamicBytes {
+        loc: Loc::Codegen,
+        ty: Type::DynamicBytes,
+        size: decoded_length.clone().into(),
+        initializer: None,
+    };
+
+    wrapper_cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: encoded_bytes,
+            expr:expr.clone(),
+        },
+    );
+
+        let bytes_var = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: Type::DynamicBytes,
+        var_no: encoded_bytes,
+    };
+
+
+    let vector_data_ptr = Expression::VectorData {
+        pointer: Box::new(bytes_var.clone()),
+    };
+
+    let encoded_data_pos = soroban_encode_arg(vector_data_ptr, wrapper_cfg, vartab, ns);
+
+    let unused_res = vartab.temp_name("unused_res", &Type::Uint(64));
+
+    let unpack_instr = Instr::Call {
+        res: vec![unused_res],
+        return_tys: vec![Type::Uint(64)],
+        call: crate::codegen::cfg::InternalCallTy::HostFunction {
+            name: HostFunctions::VectorUnpackToLinearMemory.name().to_string(),
+        },
+        args: vec![arg.clone(), encoded_data_pos, vec_len],
+    };
+
+    wrapper_cfg.add(vartab, unpack_instr);
+
+
+    bytes_var
+}
+
+
+
 
 /// Decode a struct from soroban encoding. Struct fields are laid out sequentially in a buffer, where each field is 64 bits long.
 fn decode_struct(
