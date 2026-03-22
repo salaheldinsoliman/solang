@@ -8,10 +8,9 @@ use crate::sema::expression::resolve_expression::expression;
 use crate::sema::expression::strings::unescape;
 use crate::sema::expression::{ExprContext, ResolveTo};
 use crate::sema::symtable::Symtable;
+use crate::sema::target_hooks::{sema_hooks, ChecksumAddressLiteralPolicy, CurrencyUnitSystem};
 use crate::sema::unused_variable::used_variable;
-use crate::Target;
-use base58::{FromBase58, FromBase58Error};
-use num_bigint::{BigInt, Sign};
+use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{FromPrimitive, Num, Zero};
 use solang_parser::diagnostics::Diagnostic;
@@ -133,32 +132,35 @@ pub(crate) fn hex_number_literal(
     if n.starts_with("0x") && !n.chars().any(|c| c == '_') && n.len() == 42 {
         let address = to_hexstr_eip55(n);
 
-        if ns.target == Target::EVM {
-            return if address == *n {
-                let s: String = address.chars().skip(2).collect();
+        match sema_hooks(ns).checksum_address_literal_policy() {
+            ChecksumAddressLiteralPolicy::EnforceChecksumAndParse => {
+                return if address == *n {
+                    let s: String = address.chars().skip(2).collect();
 
-                Ok(Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: Type::Address(false),
-                    value: BigInt::from_str_radix(&s, 16).unwrap(),
-                })
-            } else {
+                    Ok(Expression::NumberLiteral {
+                        loc: *loc,
+                        ty: Type::Address(false),
+                        value: BigInt::from_str_radix(&s, 16).unwrap(),
+                    })
+                } else {
+                    diagnostics.push(Diagnostic::error(
+                        *loc,
+                        format!("address literal has incorrect checksum, expected '{address}'"),
+                    ));
+                    Err(())
+                };
+            }
+            ChecksumAddressLiteralPolicy::RejectChecksummedLiteral if address == *n => {
                 diagnostics.push(Diagnostic::error(
                     *loc,
-                    format!("address literal has incorrect checksum, expected '{address}'"),
+                    format!(
+                        "ethereum address literal '{}' not supported on target {}",
+                        n, ns.target
+                    ),
                 ));
-                Err(())
-            };
-        } else if address == *n {
-            // looks like ethereum address
-            diagnostics.push(Diagnostic::error(
-                *loc,
-                format!(
-                    "ethereum address literal '{}' not supported on target {}",
-                    n, ns.target
-                ),
-            ));
-            return Err(());
+                return Err(());
+            }
+            ChecksumAddressLiteralPolicy::RejectChecksummedLiteral => {}
         }
     }
 
@@ -203,118 +205,7 @@ pub(super) fn address_literal(
     ns: &Namespace,
     diagnostics: &mut Diagnostics,
 ) -> Result<Expression, ()> {
-    if ns.target.is_polkadot() {
-        match address.from_base58() {
-            Ok(v) => {
-                if v.len() != ns.address_length + 3 {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        format!(
-                            "address literal {} incorrect length of {}",
-                            address,
-                            v.len()
-                        ),
-                    ));
-                    return Err(());
-                }
-
-                let hash_data: Vec<u8> = b"SS58PRE"
-                    .iter()
-                    .chain(v[..=ns.address_length].iter())
-                    .cloned()
-                    .collect();
-
-                let hash = blake2_rfc::blake2b::blake2b(64, &[], &hash_data);
-                let hash = hash.as_bytes();
-
-                if v[ns.address_length + 1] != hash[0] || v[ns.address_length + 2] != hash[1] {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        format!("address literal {address} hash incorrect checksum"),
-                    ));
-                    return Err(());
-                }
-
-                Ok(Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: Type::Address(false),
-                    value: BigInt::from_bytes_be(Sign::Plus, &v[1..ns.address_length + 1]),
-                })
-            }
-            Err(FromBase58Error::InvalidBase58Length) => {
-                diagnostics.push(Diagnostic::error(
-                    *loc,
-                    format!("address literal {address} invalid base58 length"),
-                ));
-                Err(())
-            }
-            Err(FromBase58Error::InvalidBase58Character(ch, pos)) => {
-                let mut loc = *loc;
-                if let pt::Loc::File(_, start, end) = &mut loc {
-                    *start += pos;
-                    *end = *start;
-                }
-                diagnostics.push(Diagnostic::error(
-                    loc,
-                    format!("address literal {address} invalid character '{ch}'"),
-                ));
-                Err(())
-            }
-        }
-    } else if ns.target == Target::Solana {
-        match address.from_base58() {
-            Ok(v) => {
-                if v.len() != ns.address_length {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        format!(
-                            "address literal {} incorrect length of {}",
-                            address,
-                            v.len()
-                        ),
-                    ));
-                    Err(())
-                } else {
-                    Ok(Expression::NumberLiteral {
-                        loc: *loc,
-                        ty: Type::Address(false),
-                        value: BigInt::from_bytes_be(Sign::Plus, &v),
-                    })
-                }
-            }
-            Err(FromBase58Error::InvalidBase58Length) => {
-                diagnostics.push(Diagnostic::error(
-                    *loc,
-                    format!("address literal {address} invalid base58 length"),
-                ));
-                Err(())
-            }
-            Err(FromBase58Error::InvalidBase58Character(ch, pos)) => {
-                let mut loc = *loc;
-                if let pt::Loc::File(_, start, end) = &mut loc {
-                    *start += pos;
-                    *end = *start;
-                }
-                diagnostics.push(Diagnostic::error(
-                    loc,
-                    format!("address literal {address} invalid character '{ch}'"),
-                ));
-                Err(())
-            }
-        }
-    } else if ns.target == Target::Soroban {
-        Ok(Expression::BytesLiteral {
-            loc: *loc,
-            ty: Type::Address(true),
-            value: address.to_string().into_bytes(),
-        })
-    } else {
-        diagnostics.push(Diagnostic::error(
-            *loc,
-            format!("address literal {} not supported on {}", address, ns.target),
-        ));
-        Err(())
-    }
+    sema_hooks(ns).resolve_address_literal(loc, address, ns, diagnostics)
 }
 
 /// Resolve the given number literal, multiplied by value of unit
@@ -549,20 +440,23 @@ pub(crate) fn unit_literal(
     diagnostics: &mut Diagnostics,
 ) -> BigInt {
     if let Some(unit) = unit {
-        match unit.name.as_str() {
-            "wei" | "gwei" | "ether" if ns.target != crate::Target::EVM => {
+        match (sema_hooks(ns).currency_unit_system(), unit.name.as_str()) {
+            (CurrencyUnitSystem::Ethereum, "sol" | "lamports")
+            | (CurrencyUnitSystem::Solana, "wei" | "gwei" | "ether")
+            | (CurrencyUnitSystem::Neutral, "wei" | "gwei" | "ether")
+            | (CurrencyUnitSystem::Neutral, "sol" | "lamports") => {
+                let domain = if matches!(unit.name.as_str(), "sol" | "lamports") {
+                    "solana"
+                } else {
+                    "ethereum"
+                };
+
                 diagnostics.push(Diagnostic::warning(
                     *loc,
-                    format!("ethereum currency unit used while targeting {}", ns.target),
+                    format!("{domain} currency unit used while targeting {}", ns.target),
                 ));
             }
-            "sol" | "lamports" if ns.target != crate::Target::Solana => {
-                diagnostics.push(Diagnostic::warning(
-                    *loc,
-                    format!("solana currency unit used while targeting {}", ns.target),
-                ));
-            }
-            _ => (),
+            _ => {}
         }
 
         match unit.name.as_str() {

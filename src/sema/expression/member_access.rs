@@ -12,8 +12,11 @@ use crate::sema::expression::resolve_expression::expression;
 use crate::sema::expression::{ExprContext, ResolveTo};
 use crate::sema::solana_accounts::BuiltinAccounts;
 use crate::sema::symtable::Symtable;
+use crate::sema::target_hooks::{
+    sema_hooks, AccountInfoMemberAccessPolicy, AddressBalancePolicy, AddressCodePolicy,
+    RuntimeCodePolicy,
+};
 use crate::sema::unused_variable::{assigned_variable, used_variable};
-use crate::Target;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
 use solang_parser::diagnostics::{Diagnostic, Note};
@@ -254,7 +257,8 @@ pub(super) fn member_access(
                 };
             } else if matches!(*elem_ty, Type::Struct(StructType::AccountInfo))
                 && context.function_no.is_some()
-                && ns.target == Target::Solana
+                && sema_hooks(ns).accountinfo_member_access_policy()
+                    == AccountInfoMemberAccessPolicy::Enabled
             {
                 return if ns.functions[context.function_no.unwrap()]
                     .solana_accounts
@@ -353,35 +357,39 @@ pub(super) fn member_access(
             _ => {}
         },
         Type::Address(_) if id.name == "balance" => {
-            if ns.target.is_polkadot() {
-                let mut is_this = false;
+            match sema_hooks(ns).address_balance_policy() {
+                AddressBalancePolicy::Allowed => {}
+                AddressBalancePolicy::ThisOnly => {
+                    let mut is_this = false;
 
-                if let Expression::Cast { expr: this, .. } = &expr {
-                    if let Expression::Builtin {
-                        kind: Builtin::GetAddress,
-                        ..
-                    } = this.as_ref()
-                    {
-                        is_this = true;
+                    if let Expression::Cast { expr: this, .. } = &expr {
+                        if let Expression::Builtin {
+                            kind: Builtin::GetAddress,
+                            ..
+                        } = this.as_ref()
+                        {
+                            is_this = true;
+                        }
+                    }
+
+                    if !is_this {
+                        diagnostics.push(Diagnostic::error(
+                            expr.loc(),
+                            "polkadot can only retrieve balance of 'this', like 'address(this).balance'"
+                                .to_string(),
+                        ));
+                        return Err(());
                     }
                 }
-
-                if !is_this {
+                AddressBalancePolicy::Unsupported => {
                     diagnostics.push(Diagnostic::error(
                         expr.loc(),
-                        "polkadot can only retrieve balance of 'this', like 'address(this).balance'"
+                        "balance is not available on Solana. Use \
+                        tx.accounts.account_name.lamports to fetch the balance."
                             .to_string(),
                     ));
                     return Err(());
                 }
-            } else if ns.target == Target::Solana {
-                diagnostics.push(Diagnostic::error(
-                    expr.loc(),
-                    "balance is not available on Solana. Use \
-                    tx.accounts.account_name.lamports to fetch the balance."
-                        .to_string(),
-                ));
-                return Err(());
             }
             used_variable(ns, &expr, symtable);
             return Ok(Expression::Builtin {
@@ -392,7 +400,7 @@ pub(super) fn member_access(
             });
         }
         Type::Address(_) if id.name == "code" => {
-            if ns.target != Target::EVM {
+            if sema_hooks(ns).address_code_policy() == AddressCodePolicy::Unsupported {
                 diagnostics.push(Diagnostic::error(
                     expr.loc(),
                     format!("'address.code' is not supported on {}", ns.target),
@@ -677,11 +685,7 @@ fn event_selector(
                 Ok(Some(Expression::EventSelector {
                     loc: *loc,
                     event_no,
-                    ty: if ns.target == Target::Solana {
-                        Type::Bytes(8)
-                    } else {
-                        Type::Bytes(32)
-                    },
+                    ty: Type::Bytes(sema_hooks(ns).event_selector_length()),
                 }))
             }
         } else {
@@ -824,7 +828,7 @@ fn type_name_expr(
                 }
 
                 let kind = if field.name == "runtimeCode" {
-                    if ns.target == Target::EVM {
+                    if sema_hooks(ns).runtime_code_policy() == RuntimeCodePolicy::CheckImmutables {
                         let notes: Vec<_> = ns.contracts[*no]
                             .variables
                             .iter()

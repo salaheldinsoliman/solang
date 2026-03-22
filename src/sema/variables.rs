@@ -15,7 +15,7 @@ use super::{
 };
 use crate::sema::expression::resolve_expression::expression;
 use crate::sema::namespace::ResolveTypeContext;
-use crate::Target;
+use crate::sema::target_hooks::{sema_hooks, VariableStorageTypePolicy};
 use solang_parser::{
     doccomment::DocComment,
     pt::{self, CodeLocation, OptionalCodeLocation},
@@ -251,24 +251,30 @@ pub fn variable_decl<'a>(
         }
     }
 
-    if ns.target == Target::Soroban {
-        if storage_type.is_none() {
-            ns.diagnostics.push(Diagnostic::warning(
-                def.loc,
-                format!(
-                    "storage type not specified for `{}`, defaulting to `persistent`",
-                    def.name.as_ref().unwrap().name
-                ),
-            ));
+    match sema_hooks(ns).variable_storage_type_policy() {
+        VariableStorageTypePolicy::SupportedWithDefault { default_storage } => {
+            if storage_type.is_none() {
+                ns.diagnostics.push(Diagnostic::warning(
+                    def.loc,
+                    format!(
+                        "storage type not specified for `{}`, defaulting to `{}`",
+                        def.name.as_ref().unwrap().name,
+                        default_storage,
+                    ),
+                ));
+            }
         }
-    } else if storage_type.is_some() {
-        ns.diagnostics.push(Diagnostic::warning(
-            def.loc,
-            format!(
-                "variable `{}`: storage types are only valid for Soroban targets",
-                def.name.as_ref().unwrap().name
-            ),
-        ));
+        VariableStorageTypePolicy::Unsupported => {
+            if storage_type.is_some() {
+                ns.diagnostics.push(Diagnostic::warning(
+                    def.loc,
+                    format!(
+                        "variable `{}`: storage types are only valid for Soroban targets",
+                        def.name.as_ref().unwrap().name
+                    ),
+                ));
+            }
+        }
     }
 
     if let Some(loc) = &has_immutable {

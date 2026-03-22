@@ -38,6 +38,7 @@ pub(crate) mod solana_accounts;
 mod statements;
 pub mod symtable;
 pub mod tags;
+pub(crate) mod target_hooks;
 mod tests;
 mod types;
 mod unused_variable;

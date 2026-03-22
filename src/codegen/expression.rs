@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use super::encoding::soroban_encoding::{soroban_decode_arg, soroban_encode_arg};
 use super::encoding::{abi_decode, abi_encode, soroban_encoding::soroban_encode};
 use super::revert::{
     assert_failure, expr_assert, log_runtime_error, require, PanicCode, SolidityError,
 };
-use super::storage::{
-    array_offset, array_pop, array_push, storage_slots_array_pop, storage_slots_array_push,
-};
+use super::storage::{array_pop, array_push, storage_slots_array_pop, storage_slots_array_push};
+use super::Options;
 use super::{
     cfg::{ControlFlowGraph, Instr, InternalCallTy},
+    target::{target_codegen, PrintBehavior, StorageArrayBuiltinKind},
     vartable::Vartable,
 };
-use super::{polkadot, Options};
 use crate::codegen::array_boundary::handle_array_assign;
-use crate::codegen::constructor::call_constructor;
 use crate::codegen::events::new_event_emitter;
 use crate::codegen::unused_variable::should_remove_assignment;
 use crate::codegen::{Builtin, Expression, HostFunctions};
@@ -27,15 +24,11 @@ use crate::sema::{
     },
     diagnostics::Diagnostics,
     eval::{eval_const_number, eval_const_rational, eval_constants_in_expression},
-    expression::integers::bigint_to_expression,
-    expression::ResolveTo,
 };
-use crate::Target;
 use core::panic;
 use num_bigint::{BigInt, Sign};
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use solang_parser::pt::{self, CodeLocation, Loc};
-use std::{cmp::Ordering, ops::Mul};
 
 pub fn expression(
     expr: &ast::Expression,
@@ -454,41 +447,19 @@ pub fn expression(
             constructor_no,
             args,
             call_args,
-        } => {
-            let address_res = vartab.temp_anonymous(&Type::Contract(*constructor_contract));
-            let success = ns
-                .target
-                .is_polkadot()
-                .then(|| vartab.temp_name("success", &Type::Uint(32)));
-            call_constructor(
-                loc,
-                *constructor_contract,
-                contract_no,
-                constructor_no,
-                args,
-                call_args,
-                address_res,
-                success,
-                func,
-                ns,
-                vartab,
-                cfg,
-                opt,
-            );
-            if ns.target.is_polkadot() {
-                polkadot::RetCodeCheckBuilder::default()
-                    .loc(*loc)
-                    .msg("contract creation failed")
-                    .success_var(success.unwrap())
-                    .insert(cfg, vartab)
-                    .handle_cases(cfg, ns, opt, vartab);
-            }
-            Expression::Variable {
-                loc: *loc,
-                ty: Type::Contract(*constructor_contract),
-                var_no: address_res,
-            }
-        }
+        } => target_codegen(ns).constructor(
+            loc,
+            *constructor_contract,
+            contract_no,
+            constructor_no,
+            args,
+            call_args,
+            cfg,
+            func,
+            ns,
+            vartab,
+            opt,
+        ),
         ast::Expression::InternalFunction {
             function_no,
             signature,
@@ -517,54 +488,7 @@ pub fn expression(
             let array_ty = array.ty().deref_into();
             let array = expression(array, cfg, contract_no, func, ns, vartab, opt);
 
-            match array_ty {
-                Type::Bytes(length) => {
-                    let ast_expr = bigint_to_expression(
-                        loc,
-                        &BigInt::from_u8(length).unwrap(),
-                        ns,
-                        &mut Diagnostics::default(),
-                        ResolveTo::Type(ty),
-                        None,
-                    )
-                    .unwrap();
-                    expression(&ast_expr, cfg, contract_no, func, ns, vartab, opt)
-                }
-                Type::DynamicBytes | Type::String => Expression::StorageArrayLength {
-                    loc: *loc,
-                    ty: ty.clone(),
-                    array: Box::new(array),
-                    elem_ty: elem_ty.clone(),
-                },
-                Type::Array(_, dim) => match dim.last().unwrap() {
-                    ArrayLength::Dynamic => {
-                        if ns.target == Target::Solana || ns.target == Target::Soroban {
-                            Expression::StorageArrayLength {
-                                loc: *loc,
-                                ty: ty.clone(),
-                                array: Box::new(array),
-                                elem_ty: elem_ty.clone(),
-                            }
-                        } else {
-                            load_storage(loc, &ns.storage_type(), array, cfg, vartab, None, ns)
-                        }
-                    }
-                    ArrayLength::Fixed(length) => {
-                        let ast_expr = bigint_to_expression(
-                            loc,
-                            length,
-                            ns,
-                            &mut Diagnostics::default(),
-                            ResolveTo::Type(ty),
-                            None,
-                        )
-                        .unwrap();
-                        expression(&ast_expr, cfg, contract_no, func, ns, vartab, opt)
-                    }
-                    _ => unreachable!(),
-                },
-                _ => unreachable!(),
-            }
+            target_codegen(ns).array_length(loc, ty, &array_ty, array, elem_ty, cfg, vartab, ns)
         }
         ast::Expression::Builtin {
             kind: ast::Builtin::ExternalFunctionAddress,
@@ -649,7 +573,7 @@ pub fn expression(
             array_ty,
             array,
             index,
-        } => array_subscript(
+        } => target_codegen(ns).subscript(
             loc,
             elem_ty,
             array_ty,
@@ -669,62 +593,11 @@ pub fn expression(
             field: field_no,
         } if ty.is_contract_storage() => {
             if let Type::Struct(struct_ty) = var.ty().deref_any() {
-                let offset = if ns.target == Target::Solana {
-                    struct_ty.definition(ns).storage_offsets[*field_no].clone()
-                } else {
-                    struct_ty.definition(ns).fields[..*field_no]
-                        .iter()
-                        .filter(|field| !field.infinite_size)
-                        .map(|field| field.ty.storage_slots(ns))
-                        .sum()
-                };
+                let target = target_codegen(ns);
+                let offset = target.struct_offset(*struct_ty, *field_no, ns);
+                let storage = expression(var, cfg, contract_no, func, ns, vartab, opt);
 
-                if ns.target == Target::Soroban {
-                    // In Soroban, storage struct members are accessed via a key whose representation is a Soroban Vec.
-                    // Therefore instead of adding the offset we insert it as a separate argument.
-
-                    let soroban_key = expression(var, cfg, contract_no, func, ns, vartab, opt);
-
-                    let offset = Expression::NumberLiteral {
-                        loc: *loc,
-                        ty: Type::Uint(32),
-                        value: offset,
-                    };
-
-                    let offset_encoded = soroban_encode_arg(offset, cfg, vartab, ns);
-
-                    let res = vartab.temp_name("vec_push_codegen", &Type::Uint(64));
-                    let var = Expression::Variable {
-                        loc: Loc::Codegen,
-                        ty: Type::Uint(64),
-                        var_no: res,
-                    };
-
-                    let enum_vec_put = Instr::Call {
-                        res: vec![res],
-                        return_tys: vec![Type::Uint(64)],
-                        call: InternalCallTy::HostFunction {
-                            name: HostFunctions::VecPushBack.name().to_string(),
-                        },
-                        args: vec![soroban_key, offset_encoded],
-                    };
-
-                    cfg.add(vartab, enum_vec_put);
-
-                    var
-                } else {
-                    Expression::Add {
-                        loc: *loc,
-                        ty: ns.storage_type(),
-                        overflowing: true,
-                        left: Box::new(expression(var, cfg, contract_no, func, ns, vartab, opt)),
-                        right: Box::new(Expression::NumberLiteral {
-                            loc: *loc,
-                            ty: ns.storage_type(),
-                            value: offset,
-                        }),
-                    }
-                }
+                target.struct_member(loc, storage, offset, ns.storage_type(), cfg, vartab, ns)
             } else {
                 unreachable!();
             }
@@ -859,27 +732,7 @@ pub fn expression(
         },
         ast::Expression::Load { loc, ty, expr: e } => {
             let expr = Box::new(expression(e, cfg, contract_no, func, ns, vartab, opt));
-
-            // Soroban lazy decode path: if memory contains encoded handles, decode on demand.
-            if ns.target == Target::Soroban {
-                if let Type::Ref(inner) = expr.ty() {
-                    if matches!(inner.as_ref(), Type::SorobanHandle(_)) {
-                        let load_handle = Expression::Load {
-                            loc: *loc,
-                            ty: inner.as_ref().clone(),
-                            expr: expr.clone(),
-                        };
-
-                        return soroban_decode_arg(load_handle, cfg, vartab, ns, None);
-                    }
-                }
-            }
-
-            Expression::Load {
-                loc: *loc,
-                ty: ty.clone(),
-                expr,
-            }
+            target_codegen(ns).load(loc, ty.clone(), expr, cfg, vartab, ns)
         }
         // for some built-ins, we have to inline special case code
         ast::Expression::Builtin {
@@ -899,10 +752,15 @@ pub fn expression(
             args,
         } => {
             if args[0].ty().is_contract_storage() {
-                if ns.target == Target::Solana || args[0].ty().is_storage_bytes() {
-                    array_push(loc, args, cfg, contract_no, func, ns, vartab, opt)
-                } else {
-                    storage_slots_array_push(loc, args, cfg, contract_no, func, ns, vartab, opt)
+                let array_ty = args[0].ty();
+
+                match target_codegen(ns).array_kind(&array_ty) {
+                    StorageArrayBuiltinKind::PushPopInstruction => {
+                        array_push(loc, args, cfg, contract_no, func, ns, vartab, opt)
+                    }
+                    StorageArrayBuiltinKind::SlotBased => {
+                        storage_slots_array_push(loc, args, cfg, contract_no, func, ns, vartab, opt)
+                    }
                 }
             } else {
                 let second_arg = if args.len() > 1 {
@@ -931,10 +789,13 @@ pub fn expression(
             args,
         } => {
             if args[0].ty().is_contract_storage() {
-                if ns.target == Target::Solana || args[0].ty().is_storage_bytes() {
-                    array_pop(loc, args, &ty[0], cfg, contract_no, func, ns, vartab, opt)
-                } else {
-                    storage_slots_array_pop(
+                let array_ty = args[0].ty();
+
+                match target_codegen(ns).array_kind(&array_ty) {
+                    StorageArrayBuiltinKind::PushPopInstruction => {
+                        array_pop(loc, args, &ty[0], cfg, contract_no, func, ns, vartab, opt)
+                    }
+                    StorageArrayBuiltinKind::SlotBased => storage_slots_array_pop(
                         loc,
                         args,
                         &ty[0],
@@ -944,7 +805,7 @@ pub fn expression(
                         ns,
                         vartab,
                         opt,
-                    )
+                    ),
                 }
             } else {
                 let address_res = vartab.temp_anonymous(&ty[0]);
@@ -990,10 +851,9 @@ pub fn expression(
             if opt.log_prints {
                 let expr = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
 
-                let to_print = if ns.target.is_polkadot() {
-                    add_prefix_and_delimiter_to_print(expr)
-                } else {
-                    expr
+                let to_print = match target_codegen(ns).print() {
+                    PrintBehavior::Plain => expr,
+                    PrintBehavior::PrefixAndDelimiter => add_prefix_and_delimiter_to_print(expr),
                 };
 
                 let res = if let Expression::AllocDynamicBytes {
@@ -1072,11 +932,27 @@ pub fn expression(
         // The Polkadot gas price builtin takes an argument; the others do not
         ast::Expression::Builtin {
             loc,
+            tys,
             kind: ast::Builtin::Gasprice,
-            args: expr,
+            args,
             ..
-        } if expr.len() == 1 && ns.target == Target::EVM => {
-            builtin_evm_gasprice(loc, expr, cfg, contract_no, func, ns, vartab, opt)
+        } => {
+            if args.len() == 1 && target_codegen(ns).gasprice_units_arg() {
+                builtin_evm_gasprice(loc, args, cfg, contract_no, func, ns, vartab, opt)
+            } else {
+                expr_builtin(
+                    args,
+                    cfg,
+                    contract_no,
+                    func,
+                    ns,
+                    vartab,
+                    loc,
+                    tys,
+                    ast::Builtin::Gasprice,
+                    opt,
+                )
+            }
         }
         ast::Expression::Builtin {
             loc,
@@ -1376,15 +1252,12 @@ fn post_incdec(
 
             match var.ty() {
                 Type::StorageRef(..) => {
-                    let mut value = Expression::Variable {
+                    let value = Expression::Variable {
                         loc: *loc,
                         ty: ty.clone(),
                         var_no: res,
                     };
-                    // If the target is Soroban, encode the value before storing it in storage.
-                    if ns.target == Target::Soroban {
-                        value = soroban_encode_arg(value, cfg, vartab, ns);
-                    }
+                    let value = target_codegen(ns).store_storage(value, cfg, vartab, ns);
 
                     cfg.add(
                         vartab,
@@ -1504,15 +1377,12 @@ fn pre_incdec(
 
             match var.ty() {
                 Type::StorageRef(..) => {
-                    let mut value = Expression::Variable {
+                    let value = Expression::Variable {
                         loc: *loc,
                         ty: ty.clone(),
                         var_no: res,
                     };
-
-                    if ns.target == Target::Soroban {
-                        value = soroban_encode_arg(value, cfg, vartab, ns)
-                    }
+                    let value = target_codegen(ns).store_storage(value, cfg, vartab, ns);
 
                     cfg.add(
                         vartab,
@@ -1696,66 +1566,7 @@ fn payable_send(
 ) -> Expression {
     let address = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
     let value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
-    let success = vartab.temp(
-        &pt::Identifier {
-            loc: *loc,
-            name: "success".to_owned(),
-        },
-        &Type::Uint(32),
-    );
-
-    // Ethereum can only transfer via external call
-    if ns.target == Target::EVM {
-        cfg.add(
-            vartab,
-            Instr::ExternalCall {
-                loc: *loc,
-                success: Some(success),
-                address: Some(address),
-                accounts: ExternalCallAccounts::AbsentArgument,
-                seeds: None,
-                payload: Expression::AllocDynamicBytes {
-                    loc: *loc,
-                    ty: Type::DynamicBytes,
-                    size: Box::new(Expression::NumberLiteral {
-                        loc: *loc,
-                        ty: Type::Uint(32),
-                        value: BigInt::from(0),
-                    }),
-                    initializer: Some(vec![]),
-                },
-                value,
-                gas: Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: Type::Uint(64),
-                    value: BigInt::from(i64::MAX),
-                },
-                callty: CallTy::Regular,
-                contract_function_no: None,
-                flags: None,
-            },
-        );
-        return Expression::Variable {
-            loc: *loc,
-            ty: Type::Bool,
-            var_no: success,
-        };
-    }
-
-    cfg.add(
-        vartab,
-        Instr::ValueTransfer {
-            success: Some(success),
-            address,
-            value,
-        },
-    );
-
-    if ns.target != Target::Solana {
-        polkadot::check_transfer_ret(loc, success, cfg, ns, opt, vartab, false).unwrap()
-    } else {
-        unreachable!("Value transfer does not exist on Solana");
-    }
+    target_codegen(ns).payable_send(loc, address, value, cfg, ns, vartab, opt)
 }
 
 fn payable_transfer(
@@ -1770,56 +1581,7 @@ fn payable_transfer(
 ) -> Expression {
     let address = expression(&args[0], cfg, contract_no, func, ns, vartab, opt);
     let value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
-    if ns.target == Target::EVM {
-        // Ethereum can only transfer via external call
-        cfg.add(
-            vartab,
-            Instr::ExternalCall {
-                loc: *loc,
-                success: None,
-                accounts: ExternalCallAccounts::AbsentArgument,
-                seeds: None,
-                address: Some(address),
-                payload: Expression::AllocDynamicBytes {
-                    loc: *loc,
-                    ty: Type::DynamicBytes,
-                    size: Box::new(Expression::NumberLiteral {
-                        loc: *loc,
-                        ty: Type::Uint(32),
-                        value: BigInt::from(0),
-                    }),
-                    initializer: Some(vec![]),
-                },
-                value,
-                gas: Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: Type::Uint(64),
-                    value: BigInt::from(i64::MAX),
-                },
-                callty: CallTy::Regular,
-                contract_function_no: None,
-                flags: None,
-            },
-        );
-        return Expression::Poison;
-    }
-
-    let success = ns
-        .target
-        .is_polkadot()
-        .then(|| vartab.temp_name("success", &Type::Uint(32)));
-    let ins = Instr::ValueTransfer {
-        success,
-        address,
-        value,
-    };
-    cfg.add(vartab, ins);
-
-    if ns.target.is_polkadot() {
-        polkadot::check_transfer_ret(loc, success.unwrap(), cfg, ns, opt, vartab, true);
-    }
-
-    Expression::Poison
+    target_codegen(ns).payable_transfer(loc, address, value, cfg, ns, vartab, opt)
 }
 
 fn abi_encode_many(
@@ -1910,11 +1672,7 @@ fn abi_encode_with_signature(
     opt: &Options,
 ) -> Expression {
     let mut args_iter = args.iter();
-    let hash_algorithm = if ns.target == Target::Solana {
-        ast::Builtin::Sha256
-    } else {
-        ast::Builtin::Keccak256
-    };
+    let hash_algorithm = target_codegen(ns).abi_sig_hash();
 
     let hash = ast::Expression::Builtin {
         loc: *loc,
@@ -2288,42 +2046,7 @@ fn expr_builtin(
                 };
             }
 
-            // In soroban, address is retrieved via a host function call
-            if ns.target == Target::Soroban {
-                let address_var_no = vartab.temp_anonymous(&Type::Uint(64));
-                let address_var = Expression::Variable {
-                    loc: *loc,
-                    ty: Type::Address(false),
-                    var_no: address_var_no,
-                };
-
-                let retrieve_address = Instr::Call {
-                    res: vec![address_var_no],
-                    return_tys: vec![Type::Uint(64)],
-                    call: InternalCallTy::HostFunction {
-                        name: HostFunctions::GetCurrentContractAddress.name().to_string(),
-                    },
-                    args: vec![],
-                };
-
-                cfg.add(vartab, retrieve_address);
-
-                return address_var;
-            }
-
-            // In emit, GetAddress returns a pointer to the address
-            let codegen_expr = Expression::Builtin {
-                loc: *loc,
-                tys: vec![Type::Ref(Box::new(Type::Address(false)))],
-                kind: Builtin::GetAddress,
-                args: vec![],
-            };
-
-            Expression::Load {
-                loc: *loc,
-                ty: Type::Address(false),
-                expr: Box::new(codegen_expr),
-            }
+            target_codegen(ns).get_address(loc, ns, cfg, vartab)
         }
         ast::Builtin::ECRecover => {
             // TODO:
@@ -3201,7 +2924,7 @@ fn conditional_operator(
 }
 
 fn interfaceid(ns: &Namespace, contract_no: usize, loc: &pt::Loc) -> Expression {
-    let selector_len = ns.target.selector_length();
+    let selector_len = target_codegen(ns).selector_len(ns);
     let mut id = vec![0u8; selector_len as usize];
     for func_no in &ns.contracts[contract_no].functions {
         let func = &ns.functions[*func_no];
@@ -3310,15 +3033,12 @@ pub fn assign_single(
                     }
                 }
                 Type::StorageRef(..) => {
-                    let mut value = Expression::Variable {
+                    let value = Expression::Variable {
                         loc: left.loc(),
                         ty: ty.clone(),
                         var_no: pos,
                     };
-
-                    if ns.target == Target::Soroban {
-                        value = soroban_encode_arg(value, cfg, vartab, ns);
-                    }
+                    let value = target_codegen(ns).store_storage(value, cfg, vartab, ns);
 
                     cfg.add(
                         vartab,
@@ -3331,28 +3051,17 @@ pub fn assign_single(
                     );
                 }
                 Type::Ref(_) => {
-                    let data = if ns.target == Target::Soroban
-                        && matches!(
-                            dest.ty(),
-                            Type::Ref(inner) if matches!(inner.as_ref(), Type::SorobanHandle(_))
-                        ) {
-                        soroban_encode_arg(
-                            Expression::Variable {
-                                loc: Loc::Codegen,
-                                ty: ty.clone(),
-                                var_no: pos,
-                            },
-                            cfg,
-                            vartab,
-                            ns,
-                        )
-                    } else {
+                    let data = target_codegen(ns).store_ref(
+                        &dest,
                         Expression::Variable {
                             loc: Loc::Codegen,
                             ty: ty.clone(),
                             var_no: pos,
-                        }
-                    };
+                        },
+                        cfg,
+                        vartab,
+                        ns,
+                    );
 
                     cfg.add(vartab, Instr::Store { dest, data });
                 }
@@ -3569,29 +3278,7 @@ pub fn emit_function_call(
                 },
             );
 
-            let success = if ns.target.is_polkadot() {
-                let ret_code = Expression::Variable {
-                    loc: *loc,
-                    ty: Type::Uint(32),
-                    var_no: success,
-                };
-                let ret_ok = Expression::NumberLiteral {
-                    loc: *loc,
-                    ty: Type::Uint(32),
-                    value: 0.into(),
-                };
-                Expression::Equal {
-                    loc: *loc,
-                    left: ret_code.into(),
-                    right: ret_ok.into(),
-                }
-            } else {
-                Expression::Variable {
-                    loc: *loc,
-                    ty: Type::Uint(32),
-                    var_no: success,
-                }
-            };
+            let success = target_codegen(ns).raw_call_success(loc, success);
             vec![success, Expression::ReturnData { loc: *loc }]
         }
         ast::Expression::ExternalFunctionCall {
@@ -3662,10 +3349,8 @@ pub fn emit_function_call(
                     .as_ref()
                     .map(|expr| expression(expr, cfg, caller_contract_no, func, ns, vartab, opt));
 
-                let success = ns
-                    .target
-                    .is_polkadot()
-                    .then(|| vartab.temp_name("success", &Type::Uint(32)));
+                let target = target_codegen(ns);
+                let success = target.external_call_success(vartab);
                 cfg.add(
                     vartab,
                     Instr::ExternalCall {
@@ -3683,14 +3368,15 @@ pub fn emit_function_call(
                     },
                 );
 
-                if ns.target.is_polkadot() {
-                    polkadot::RetCodeCheckBuilder::default()
-                        .loc(*loc)
-                        .msg("external call failed")
-                        .success_var(success.unwrap())
-                        .insert(cfg, vartab)
-                        .handle_cases(cfg, ns, opt, vartab);
-                }
+                target.external_call_status(
+                    *loc,
+                    success,
+                    cfg,
+                    ns,
+                    opt,
+                    vartab,
+                    "external call failed",
+                );
 
                 // If the first element of returns is Void, we can discard the returns
                 if !dest_func.returns.is_empty() && returns[0] != Type::Void {
@@ -3740,7 +3426,7 @@ pub fn emit_function_call(
                 let selector = function.external_function_selector();
                 let address = function.external_function_address();
 
-                tys.insert(0, Type::Bytes(ns.target.selector_length()));
+                tys.insert(0, Type::Bytes(target_codegen(ns).selector_len(ns)));
                 args.insert(0, selector);
 
                 let (payload, _) = abi_encode(loc, args, ns, vartab, cfg, false);
@@ -3749,10 +3435,8 @@ pub fn emit_function_call(
                     .flags
                     .as_ref()
                     .map(|expr| expression(expr, cfg, caller_contract_no, func, ns, vartab, opt));
-                let success = ns
-                    .target
-                    .is_polkadot()
-                    .then(|| vartab.temp_name("success", &Type::Uint(32)));
+                let target = target_codegen(ns);
+                let success = target.external_call_success(vartab);
                 cfg.add(
                     vartab,
                     Instr::ExternalCall {
@@ -3770,14 +3454,15 @@ pub fn emit_function_call(
                     },
                 );
 
-                if ns.target.is_polkadot() {
-                    polkadot::RetCodeCheckBuilder::default()
-                        .loc(*loc)
-                        .msg("external call failed")
-                        .success_var(success.unwrap())
-                        .insert(cfg, vartab)
-                        .handle_cases(cfg, ns, opt, vartab);
-                }
+                target.external_call_status(
+                    *loc,
+                    success,
+                    cfg,
+                    ns,
+                    opt,
+                    vartab,
+                    "external call failed",
+                );
 
                 if !func_returns.is_empty() && returns[0] != Type::Void {
                     abi_decode(
@@ -3818,452 +3503,11 @@ pub fn default_gas(ns: &Namespace) -> Expression {
     Expression::NumberLiteral {
         loc: pt::Loc::Codegen,
         ty: Type::Uint(64),
-        // See EIP150
-        value: if ns.target == Target::EVM {
-            BigInt::from(i64::MAX)
-        } else {
-            BigInt::zero()
-        },
+        value: target_codegen(ns).default_gas(),
     }
 }
 
 /// Codegen for an array subscript expression
-fn array_subscript(
-    loc: &pt::Loc,
-    elem_ty: &Type,
-    array_ty: &Type,
-    array: &ast::Expression,
-    index: &ast::Expression,
-    cfg: &mut ControlFlowGraph,
-    contract_no: usize,
-    func: Option<&Function>,
-    ns: &Namespace,
-    vartab: &mut Vartable,
-    opt: &Options,
-) -> Expression {
-    if array_ty.is_storage_bytes() {
-        return Expression::Subscript {
-            loc: *loc,
-            ty: elem_ty.clone(),
-            array_ty: array_ty.clone(),
-            expr: Box::new(expression(array, cfg, contract_no, func, ns, vartab, opt)),
-            index: Box::new(expression(index, cfg, contract_no, func, ns, vartab, opt)),
-        };
-    }
-
-    if array_ty.is_mapping() {
-        let array = expression(array, cfg, contract_no, func, ns, vartab, opt);
-        let index = expression(index, cfg, contract_no, func, ns, vartab, opt);
-
-        return match ns.target {
-            Target::Solana | Target::Soroban | Target::EVM => Expression::Subscript {
-                loc: *loc,
-                ty: elem_ty.clone(),
-                array_ty: array_ty.clone(),
-                expr: Box::new(array),
-                index: Box::new(index),
-            },
-            Target::Polkadot { .. } => Expression::Keccak256 {
-                loc: *loc,
-                ty: array_ty.clone(),
-                exprs: vec![array, index],
-            },
-        };
-    }
-
-    let mut array = expression(array, cfg, contract_no, func, ns, vartab, opt);
-    let index_ty = index.ty();
-    let index = expression(index, cfg, contract_no, func, ns, vartab, opt);
-    let index_loc = index.loc();
-
-    let index_width = index_ty.bits(ns);
-
-    let array_length = match array_ty.deref_any() {
-        Type::Bytes(n) => {
-            let ast_bigint = bigint_to_expression(
-                &array.loc(),
-                &BigInt::from(*n),
-                ns,
-                &mut Diagnostics::default(),
-                ResolveTo::Unknown,
-                None,
-            )
-            .unwrap();
-            expression(&ast_bigint, cfg, contract_no, func, ns, vartab, opt)
-        }
-        Type::Array(..) => match array_ty.array_length() {
-            None => {
-                if let Type::StorageRef(..) = array_ty {
-                    if ns.target == Target::Solana || ns.target == Target::Soroban {
-                        Expression::StorageArrayLength {
-                            loc: *loc,
-                            ty: ns.storage_type(),
-                            array: Box::new(array.clone()),
-                            elem_ty: array_ty.storage_array_elem().deref_into(),
-                        }
-                    } else {
-                        let ty = if ns.target == Target::Soroban {
-                            Type::Uint(64)
-                        } else {
-                            ns.storage_type()
-                        };
-                        // TODO(Soroban): Storage type here is None, since arrays are not yet supported in Soroban
-                        let array_length =
-                            load_storage(loc, &ty, array.clone(), cfg, vartab, None, ns);
-                        if ns.target != Target::Soroban {
-                            array = Expression::Keccak256 {
-                                loc: *loc,
-                                ty: Type::Uint(256),
-                                exprs: vec![array],
-                            };
-                        }
-
-                        array_length
-                    }
-                } else {
-                    // If a subscript is encountered array length will be called
-
-                    // Return array length by default
-                    let mut returned = Expression::Builtin {
-                        loc: *loc,
-                        tys: vec![Type::Uint(32)],
-                        kind: Builtin::ArrayLength,
-                        args: vec![array.clone()],
-                    };
-
-                    if let Expression::Variable {
-                        loc, var_no: num, ..
-                    } = &array
-                    {
-                        // If the size is known (is in cfg.array_length_map), do the replacement
-
-                        if let Some(array_length_var) = cfg.array_lengths_temps.get(num) {
-                            returned = Expression::Variable {
-                                loc: *loc,
-                                ty: Type::Uint(32),
-                                var_no: *array_length_var,
-                            };
-                        }
-                    }
-                    returned
-                }
-            }
-            Some(l) => {
-                let ast_big_int = bigint_to_expression(
-                    loc,
-                    l,
-                    ns,
-                    &mut Diagnostics::default(),
-                    ResolveTo::Unknown,
-                    None,
-                )
-                .unwrap();
-                expression(&ast_big_int, cfg, contract_no, func, ns, vartab, opt)
-            }
-        },
-        Type::DynamicBytes | Type::Slice(_) => Expression::Builtin {
-            loc: *loc,
-            tys: vec![Type::Uint(32)],
-            kind: Builtin::ArrayLength,
-            args: vec![array.clone()],
-        },
-        _ => {
-            unreachable!();
-        }
-    };
-
-    let array_width = array_length.ty().bits(ns);
-    let width = std::cmp::max(array_width, index.ty().bits(ns));
-    let coerced_ty = Type::Uint(width);
-
-    let pos = vartab.temp(
-        &pt::Identifier {
-            name: "index".to_owned(),
-            loc: *loc,
-        },
-        &coerced_ty,
-    );
-
-    let expr = index.cast(&coerced_ty, ns);
-    cfg.add(
-        vartab,
-        Instr::Set {
-            loc: expr.loc(),
-            res: pos,
-            expr,
-        },
-    );
-
-    // If the array is fixed length and the index also constant, the
-    // branch will be optimized away.
-    let out_of_bounds = cfg.new_basic_block("out_of_bounds".to_string());
-    let in_bounds = cfg.new_basic_block("in_bounds".to_string());
-
-    cfg.add(
-        vartab,
-        Instr::BranchCond {
-            cond: Expression::MoreEqual {
-                loc: *loc,
-                signed: false,
-                left: Box::new(Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty.clone(),
-                    var_no: pos,
-                }),
-                right: Box::new(array_length.cast(&coerced_ty, ns)),
-            },
-            true_block: out_of_bounds,
-            false_block: in_bounds,
-        },
-    );
-
-    cfg.set_basic_block(out_of_bounds);
-    log_runtime_error(
-        opt.log_runtime_errors,
-        "array index out of bounds",
-        *loc,
-        cfg,
-        vartab,
-        ns,
-    );
-    let error = SolidityError::Panic(PanicCode::ArrayIndexOob);
-    assert_failure(loc, error, ns, cfg, vartab);
-
-    cfg.set_basic_block(in_bounds);
-
-    if let Type::Bytes(array_length) = array_ty.deref_any() {
-        let res_ty = Type::Bytes(1);
-        let from_ty = Type::Bytes(*array_length);
-        let index_ty = Type::Uint(*array_length as u16 * 8);
-
-        let to_width = array_ty.bits(ns);
-        let shift_arg_raw = Expression::Variable {
-            loc: index_loc,
-            ty: coerced_ty.clone(),
-            var_no: pos,
-        };
-
-        let shift_arg = match index_width.cmp(&to_width) {
-            Ordering::Equal => shift_arg_raw,
-            Ordering::Less => Expression::ZeroExt {
-                loc: *loc,
-                ty: index_ty.clone(),
-                expr: shift_arg_raw.into(),
-            },
-            Ordering::Greater => Expression::Trunc {
-                loc: *loc,
-                ty: index_ty.clone(),
-                expr: shift_arg_raw.into(),
-            },
-        };
-
-        return Expression::Trunc {
-            loc: *loc,
-            ty: res_ty,
-            expr: Expression::ShiftRight {
-                loc: *loc,
-                ty: from_ty,
-                left: array.into(),
-                right: Expression::ShiftLeft {
-                    loc: *loc,
-                    ty: index_ty.clone(),
-                    left: Box::new(Expression::Subtract {
-                        loc: *loc,
-                        ty: index_ty.clone(),
-                        overflowing: true,
-                        left: Expression::NumberLiteral {
-                            loc: *loc,
-                            ty: index_ty.clone(),
-                            value: BigInt::from_u8(array_length - 1).unwrap(),
-                        }
-                        .into(),
-                        right: shift_arg.into(),
-                    }),
-                    right: Expression::NumberLiteral {
-                        loc: *loc,
-                        ty: index_ty,
-                        value: BigInt::from_u8(3).unwrap(),
-                    }
-                    .into(),
-                }
-                .into(),
-                signed: false,
-            }
-            .into(),
-        };
-    }
-
-    if let Type::StorageRef(_, ty) = &array_ty {
-        let elem_ty = ty.storage_array_elem();
-        let slot_ty = ns.storage_type();
-
-        if ns.target == Target::Soroban {
-            let index = index.cast(&Type::Uint(64), ns);
-
-            let index = if elem_ty.is_reference_type(ns) {
-                soroban_encode_arg(index, cfg, vartab, ns)
-            } else {
-                index
-            };
-
-            let val = Expression::Subscript {
-                loc: *loc,
-                ty: elem_ty.clone(),
-                array_ty: array_ty.clone(),
-                expr: Box::new(array),
-                index: Box::new(index),
-            };
-            return val;
-        }
-
-        if ns.target == Target::Solana {
-            if ty.array_length().is_some() && ty.is_sparse_solana(ns) {
-                let index = Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty,
-                    var_no: pos,
-                }
-                .cast(&Type::Uint(256), ns);
-
-                Expression::Subscript {
-                    loc: *loc,
-                    ty: elem_ty,
-                    array_ty: array_ty.clone(),
-                    expr: Box::new(array),
-                    index: Box::new(index),
-                }
-            } else {
-                let index = Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty,
-                    var_no: pos,
-                }
-                .cast(&slot_ty, ns);
-
-                if ty.array_length().is_some() {
-                    // fixed length array
-                    let elem_size = elem_ty.deref_any().solana_storage_size(ns);
-
-                    Expression::Add {
-                        loc: *loc,
-                        ty: elem_ty,
-                        overflowing: true,
-                        left: Box::new(array),
-                        right: Box::new(Expression::Multiply {
-                            loc: *loc,
-                            ty: slot_ty.clone(),
-                            overflowing: true,
-                            left: Box::new(index),
-                            right: Box::new(Expression::NumberLiteral {
-                                loc: *loc,
-                                ty: slot_ty,
-                                value: elem_size,
-                            }),
-                        }),
-                    }
-                } else {
-                    Expression::Subscript {
-                        loc: *loc,
-                        ty: elem_ty,
-                        array_ty: array_ty.clone(),
-                        expr: Box::new(array),
-                        index: Box::new(index),
-                    }
-                }
-            }
-        } else {
-            let elem_size = elem_ty.storage_slots(ns);
-
-            if let Expression::NumberLiteral {
-                value: arr_length, ..
-            } = &array_length
-            {
-                if arr_length.mul(elem_size.clone()).to_u64().is_some() {
-                    // we need to calculate the storage offset. If this can be done with 64 bit
-                    // arithmetic it will be much more efficient on wasm
-                    return Expression::Add {
-                        loc: *loc,
-                        ty: elem_ty,
-                        overflowing: true,
-                        left: Box::new(array),
-                        right: Box::new(Expression::ZeroExt {
-                            loc: *loc,
-                            ty: slot_ty,
-                            expr: Box::new(Expression::Multiply {
-                                loc: *loc,
-                                ty: Type::Uint(64),
-                                overflowing: true,
-                                left: Box::new(
-                                    Expression::Variable {
-                                        loc: index_loc,
-                                        ty: coerced_ty,
-                                        var_no: pos,
-                                    }
-                                    .cast(&Type::Uint(64), ns),
-                                ),
-                                right: Box::new(Expression::NumberLiteral {
-                                    loc: *loc,
-                                    ty: Type::Uint(64),
-                                    value: elem_size,
-                                }),
-                            }),
-                        }),
-                    };
-                }
-            }
-
-            array_offset(
-                loc,
-                array,
-                Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty,
-                    var_no: pos,
-                }
-                .cast(&ns.storage_type(), ns),
-                elem_ty,
-                ns,
-            )
-        }
-    } else {
-        // Use runtime array type on Soroban so lowered wrapper args can carry
-        // Array(SorobanHandle(_), ..) representation.
-        let mut effective_array_ty = array_ty.clone();
-        let mut effective_elem_ty = elem_ty.clone();
-
-        if ns.target == Target::Soroban {
-            if let Type::Array(runtime_elem_ty, runtime_dims) = array.ty().deref_any() {
-                if matches!(runtime_elem_ty.as_ref(), Type::SorobanHandle(_)) {
-                    effective_array_ty = Type::Array(runtime_elem_ty.clone(), runtime_dims.clone());
-                    effective_elem_ty = if matches!(elem_ty, Type::Ref(_)) {
-                        Type::Ref(runtime_elem_ty.clone())
-                    } else {
-                        runtime_elem_ty.as_ref().clone()
-                    };
-                }
-            }
-        }
-
-        match effective_array_ty.deref_memory() {
-            Type::DynamicBytes | Type::Array(..) | Type::Slice(_) => Expression::Subscript {
-                loc: *loc,
-                ty: effective_elem_ty,
-                array_ty: effective_array_ty,
-                expr: Box::new(array),
-                index: Box::new(Expression::Variable {
-                    loc: index_loc,
-                    ty: coerced_ty,
-                    var_no: pos,
-                }),
-            },
-            _ => {
-                // should not happen as type-checking already done
-                unreachable!();
-            }
-        }
-    }
-}
-
 fn string_location(
     loc: &StringLocation<ast::Expression>,
     cfg: &mut ControlFlowGraph,
@@ -4315,11 +3559,7 @@ pub fn load_storage(
         var_no: res,
     };
 
-    if ns.target == Target::Soroban {
-        soroban_decode_arg(var, cfg, vartab, ns, None)
-    } else {
-        var
-    }
+    target_codegen(ns).load_storage(var, cfg, vartab, ns)
 }
 
 fn array_literal_to_memory_array(

@@ -5,6 +5,7 @@ use crate::abi::anchor::function_discriminator;
 use crate::codegen::cfg::{ControlFlowGraph, Instr};
 use crate::diagnostics::Diagnostics;
 use crate::sema::ast::ExternalCallAccounts::{AbsentArgument, NoAccount};
+use crate::sema::target_hooks::{sema_hooks, FunctionSelectorStrategy};
 use crate::sema::yul::ast::{InlineAssembly, YulFunction};
 use crate::sema::Recurse;
 use crate::{codegen, Target};
@@ -530,26 +531,30 @@ impl Function {
     pub fn selector(&self, ns: &Namespace, contract_no: &usize) -> Vec<u8> {
         if let Some((_, selector)) = &self.selector {
             selector.clone()
-        } else if ns.target == Target::Solana {
-            match self.ty {
-                FunctionTy::Constructor => function_discriminator("new"),
-                _ => {
-                    let discriminator_image = if self.mangled_name_contracts.contains(contract_no) {
-                        &self.mangled_name
-                    } else {
-                        &self.id.name
-                    };
-                    function_discriminator(discriminator_image.as_str())
+        } else {
+            match sema_hooks(ns).function_selector_strategy() {
+                FunctionSelectorStrategy::SolanaDiscriminator => match self.ty {
+                    FunctionTy::Constructor => function_discriminator("new"),
+                    _ => {
+                        let discriminator_image =
+                            if self.mangled_name_contracts.contains(contract_no) {
+                                &self.mangled_name
+                            } else {
+                                &self.id.name
+                            };
+                        function_discriminator(discriminator_image.as_str())
+                    }
+                },
+                FunctionSelectorStrategy::Keccak4 => {
+                    let mut res = [0u8; 32];
+
+                    let mut hasher = Keccak::v256();
+                    hasher.update(self.signature.as_bytes());
+                    hasher.finalize(&mut res);
+
+                    res[..4].to_vec()
                 }
             }
-        } else {
-            let mut res = [0u8; 32];
-
-            let mut hasher = Keccak::v256();
-            hasher.update(self.signature.as_bytes());
-            hasher.finalize(&mut res);
-
-            res[..4].to_vec()
         }
     }
 

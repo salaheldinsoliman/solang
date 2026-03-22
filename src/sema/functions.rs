@@ -6,11 +6,16 @@ use super::{
     diagnostics::Diagnostics,
     function_annotation::function_prototype_annotations,
     tags::resolve_tags,
+    target_hooks::{
+        sema_hooks, ConstructorNamePolicy, ConstructorOverloadPolicy, ParameterAnnotationPolicy,
+        ReceiveFunctionPolicy,
+    },
     ContractDefinition,
 };
 use crate::sema::ast::ParameterAnnotation;
 use crate::sema::function_annotation::unexpected_parameter_annotation;
 use crate::sema::namespace::ResolveTypeContext;
+#[cfg(test)]
 use crate::Target;
 use solang_parser::pt::{FunctionTy, Identifier};
 use solang_parser::{
@@ -60,13 +65,18 @@ pub fn contract_function(
                 ));
                 return None;
             }
-            // Allow setting a name in Polkadot to be used during metadata generation.
-            if func.name.is_some() && !ns.target.is_polkadot() {
-                ns.diagnostics.push(Diagnostic::error(
-                    func.loc_prototype,
-                    "constructor cannot have a name".to_string(),
-                ));
-                return None;
+            // Allow setting a name in targets that expose constructor names in metadata.
+            if func.name.is_some() {
+                if matches!(
+                    sema_hooks(ns).constructor_name_policy(),
+                    ConstructorNamePolicy::UnnamedOnly { .. }
+                ) {
+                    ns.diagnostics.push(Diagnostic::error(
+                        func.loc_prototype,
+                        "constructor cannot have a name".to_string(),
+                    ));
+                    return None;
+                }
             }
         }
         pt::FunctionTy::Fallback | pt::FunctionTy::Receive => {
@@ -429,8 +439,11 @@ pub fn contract_function(
     }
 
     let name = func.name.clone().unwrap_or_else(|| {
-        let name = if ns.target.is_polkadot() && func.ty == pt::FunctionTy::Constructor {
-            "new"
+        let name = if func.ty == pt::FunctionTy::Constructor {
+            match sema_hooks(ns).constructor_name_policy() {
+                ConstructorNamePolicy::UnnamedOnly { synthesized_name }
+                | ConstructorNamePolicy::OptionalName { synthesized_name } => synthesized_name,
+            }
         } else {
             ""
         };
@@ -484,7 +497,7 @@ pub fn contract_function(
 
     if func.ty == pt::FunctionTy::Constructor {
         // In the eth solidity only one constructor is allowed
-        if ns.target == Target::EVM {
+        if sema_hooks(ns).constructor_overload_policy() == ConstructorOverloadPolicy::SingleOnly {
             if let Some(prev_func_no) = ns.contracts[contract_no]
                 .functions
                 .iter()
@@ -560,7 +573,9 @@ pub fn contract_function(
 
         Some(pos)
     } else if func.ty == pt::FunctionTy::Receive || func.ty == pt::FunctionTy::Fallback {
-        if func.ty == pt::FunctionTy::Receive && ns.target == Target::Solana {
+        if func.ty == pt::FunctionTy::Receive
+            && sema_hooks(ns).receive_function_policy() == ReceiveFunctionPolicy::Unsupported
+        {
             ns.diagnostics.push(Diagnostic::error(
                 func.loc_prototype,
                 format!("target {} does not support receive() functions, see https://solang.readthedocs.io/en/latest/language/functions.html#fallback-and-receive-function", ns.target),
@@ -854,22 +869,28 @@ pub fn resolve_params(
     for (loc, p) in parameters {
         let p = match p {
             Some(p @ pt::Parameter { ref annotation, .. }) => {
-                if annotation.is_some()
-                    && *func_ty != FunctionTy::Constructor
-                    && ns.target == Target::Solana
-                {
-                    diagnostics.push(Diagnostic::error(
-                        annotation.as_ref().unwrap().loc,
-                        "parameter annotations are only allowed in constructors".to_string(),
-                    ));
-                    success = false;
-                    continue;
-                } else if annotation.is_some() && ns.target != Target::Solana {
-                    diagnostics.push(unexpected_parameter_annotation(
-                        annotation.as_ref().unwrap().loc,
-                    ));
-                    success = false;
-                    continue;
+                if annotation.is_some() {
+                    match sema_hooks(ns).parameter_annotation_policy() {
+                        ParameterAnnotationPolicy::Disallowed => {
+                            diagnostics.push(unexpected_parameter_annotation(
+                                annotation.as_ref().unwrap().loc,
+                            ));
+                            success = false;
+                            continue;
+                        }
+                        ParameterAnnotationPolicy::ConstructorsOnly
+                            if *func_ty != FunctionTy::Constructor =>
+                        {
+                            diagnostics.push(Diagnostic::error(
+                                annotation.as_ref().unwrap().loc,
+                                "parameter annotations are only allowed in constructors"
+                                    .to_string(),
+                            ));
+                            success = false;
+                            continue;
+                        }
+                        ParameterAnnotationPolicy::ConstructorsOnly => {}
+                    }
                 }
 
                 p

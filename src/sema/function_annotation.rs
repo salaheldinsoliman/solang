@@ -13,7 +13,7 @@ use crate::sema::eval::{eval_const_number, EvaluationError};
 use crate::sema::expression::literals::number_literal;
 use crate::sema::expression::resolve_expression::expression;
 use crate::sema::solana_accounts::BuiltinAccounts;
-use crate::Target;
+use crate::sema::target_hooks::{sema_hooks, AnnotationPolicy, SelectorOverridePolicy};
 use indexmap::map::Entry;
 use num_traits::ToPrimitive;
 use solang_parser::pt::{self, Annotation, CodeLocation, Visibility};
@@ -48,26 +48,36 @@ pub fn function_prototype_annotations(
     for annotation in annotations {
         match annotation.id.name.as_str() {
             "selector" => function_selector(func, annotation, &mut diagnostics, ns),
-            "account" | "signer" | "mutableAccount" | "mutableSigner"
-                if ns.target == Target::Solana =>
-            {
-                if !func.is_constructor() && !matches!(func.visibility, Visibility::External(..)) {
+            "account" | "signer" | "mutableAccount" | "mutableSigner" => {
+                if sema_hooks(ns).account_annotation_policy() == AnnotationPolicy::Supported {
+                    if !func.is_constructor()
+                        && !matches!(func.visibility, Visibility::External(..))
+                    {
+                        diagnostics.push(Diagnostic::error(
+                            annotation.loc,
+                            "account declarations are only valid in functions declared as external"
+                                .to_string(),
+                        ));
+                        continue;
+                    }
+
+                    account_declaration(
+                        &annotation.loc,
+                        annotation.value.as_ref().unwrap(),
+                        func,
+                        annotation.id.name.as_str(),
+                        &mut ns.diagnostics,
+                        &mut ConstructorAnnotations::default(),
+                    );
+                } else if !func.has_body {
                     diagnostics.push(Diagnostic::error(
                         annotation.loc,
-                        "account declarations are only valid in functions declared as external"
-                            .to_string(),
+                        format!(
+                            "annotation '@{}' not allowed on {} with no body",
+                            annotation.id.name, func.ty
+                        ),
                     ));
-                    continue;
                 }
-
-                account_declaration(
-                    &annotation.loc,
-                    annotation.value.as_ref().unwrap(),
-                    func,
-                    annotation.id.name.as_str(),
-                    &mut ns.diagnostics,
-                    &mut ConstructorAnnotations::default(),
-                );
             }
 
             _ if !func.has_body => {
@@ -97,7 +107,8 @@ fn function_selector(
     ns: &mut Namespace,
 ) {
     if func.ty != pt::FunctionTy::Function
-        && (!ns.target.is_polkadot() || func.ty != pt::FunctionTy::Constructor)
+        && (func.ty != pt::FunctionTy::Constructor
+            || sema_hooks(ns).selector_override_policy() == SelectorOverridePolicy::FunctionOnly)
     {
         diagnostics.push(Diagnostic::error(
             annotation.loc,
@@ -208,8 +219,9 @@ pub(super) fn function_body_annotations(
     let mut has_annotation = false;
 
     let mut annotations = ConstructorAnnotations::default();
-    let is_solana_constructor =
-        ns.target == Target::Solana && ns.functions[function_no].ty == pt::FunctionTy::Constructor;
+    let is_target_constructor = sema_hooks(ns).constructor_annotation_policy()
+        == AnnotationPolicy::Supported
+        && ns.functions[function_no].ty == pt::FunctionTy::Constructor;
 
     for note in body_annotations {
         match note.id.name.as_str() {
@@ -217,7 +229,7 @@ pub(super) fn function_body_annotations(
                 // selectors already done in function_prototype_annotations
                 // without using a symbol table
             }
-            "seed" if is_solana_constructor => {
+            "seed" if is_target_constructor => {
                 let ty = Type::Slice(Box::new(Type::Bytes(1)));
 
                 let mut resolved = None;
@@ -238,7 +250,7 @@ pub(super) fn function_body_annotations(
                     annotations.seeds.push(resolved);
                 }
             }
-            "bump" if is_solana_constructor => {
+            "bump" if is_target_constructor => {
                 let ty = Type::Bytes(1);
 
                 body_annotation(
@@ -253,7 +265,7 @@ pub(super) fn function_body_annotations(
                     &mut has_annotation,
                 );
             }
-            "space" if is_solana_constructor => {
+            "space" if is_target_constructor => {
                 let ty = Type::Uint(64);
 
                 body_annotation(
@@ -268,7 +280,7 @@ pub(super) fn function_body_annotations(
                     &mut has_annotation,
                 );
             }
-            "payer" if is_solana_constructor => {
+            "payer" if is_target_constructor => {
                 account_declaration(
                     &note.loc,
                     note.value.as_ref().unwrap(),
@@ -280,7 +292,7 @@ pub(super) fn function_body_annotations(
             }
             "account" | "signer" | "mutableAccount" | "mutableSigner"
             // We already deal with these cases in `function_prototype_annotation`
-                if ns.target == Target::Solana => (),
+                if sema_hooks(ns).account_annotation_policy() == AnnotationPolicy::Supported => (),
 
             _ => diagnostics.push(Diagnostic::error(
                 note.loc,

@@ -11,6 +11,7 @@ use super::{
 };
 use crate::sema::ast::SolanaAccount;
 use crate::sema::expression::constructor::match_constructor_to_args;
+use crate::sema::target_hooks::{sema_hooks, ConcreteContractPolicy};
 use crate::{sema::ast::Namespace, sema::unused_variable::emit_warning_local_variable};
 use indexmap::{IndexMap, IndexSet};
 use num_bigint::BigInt;
@@ -714,9 +715,11 @@ fn check_mangled_function_names(contract_no: usize, ns: &mut ast::Namespace) {
 
 /// A contract on the contracts pallet requires at least one public message
 fn polkadot_requires_public_functions(contract_no: usize, ns: &mut ast::Namespace) {
+    let requires_public =
+        sema_hooks(ns).concrete_contract_policy() == ConcreteContractPolicy::RequirePublicMessage;
     let contract = &mut ns.contracts[contract_no];
 
-    if ns.target.is_polkadot()
+    if requires_public
         && !ns.diagnostics.any_errors()
         && contract.is_concrete()
         && !contract.all_functions.keys().any(|func_no| {

@@ -19,10 +19,12 @@ use crate::sema::function_annotation::function_body_annotations;
 use crate::sema::function_annotation::{unexpected_parameter_annotation, UnresolvedAnnotation};
 use crate::sema::namespace::ResolveTypeContext;
 use crate::sema::symtable::{VariableInitializer, VariableUsage};
+use crate::sema::target_hooks::{
+    sema_hooks, CustomErrorRevertPolicy, InlineAssemblyFlagPolicy, TryCatchPolicy,
+};
 use crate::sema::unused_variable::{assigned_variable, check_function_call, used_variable};
 use crate::sema::yul::resolve_inline_assembly;
 use crate::sema::Recurse;
-use crate::Target;
 use solang_parser::pt;
 use solang_parser::pt::CatchClause;
 use solang_parser::pt::CodeLocation;
@@ -842,7 +844,10 @@ fn statement(
 
             if let Some(flags) = flags {
                 for flag in flags {
-                    if flag.string == "memory-safe" && ns.target == Target::EVM {
+                    if flag.string == "memory-safe"
+                        && sema_hooks(ns).inline_assembly_flag_policy()
+                            == InlineAssemblyFlagPolicy::MemorySafeSupported
+                    {
                         if let Some(prev) = &memory_safe {
                             ns.diagnostics.push(Diagnostic::warning_with_note(
                                 flag.loc,
@@ -962,7 +967,7 @@ fn revert_pos_arg(
             ));
         }
 
-        if ns.target == Target::Solana {
+        if sema_hooks(ns).custom_error_revert_policy() == CustomErrorRevertPolicy::Unsupported {
             ns.diagnostics.push(Diagnostic::error(
                 *loc,
                 format!("revert with custom errors not supported on {}", ns.target),
@@ -1134,7 +1139,7 @@ fn revert_named_arg(
             }
         }
 
-        if ns.target == Target::Solana {
+        if sema_hooks(ns).custom_error_revert_policy() == CustomErrorRevertPolicy::Unsupported {
             ns.diagnostics.push(Diagnostic::error(
                 *loc,
                 format!("revert with custom errors not supported on {}", ns.target),
@@ -2255,7 +2260,7 @@ fn try_catch(
     ns: &mut Namespace,
     diagnostics: &mut Diagnostics,
 ) -> Result<(Statement, bool), ()> {
-    if ns.target == Target::Solana {
+    if sema_hooks(ns).try_catch_policy() == TryCatchPolicy::Unsupported {
         diagnostics.push(Diagnostic::error(
             *loc,
             "The try-catch statement is not supported on Solana. Please, go to \

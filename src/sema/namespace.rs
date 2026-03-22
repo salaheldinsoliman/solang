@@ -11,6 +11,7 @@ use super::{
     expression::{resolve_expression::expression, ExprContext, ResolveTo},
     resolve_params, resolve_returns,
     symtable::Symtable,
+    target_hooks::{sema_hooks, ContractTypePolicy},
     ArrayDimension,
 };
 use crate::Target;
@@ -24,7 +25,7 @@ use solang_parser::{
 use std::collections::HashMap;
 
 /// Provides context information for the `resolve_type` function.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum ResolveTypeContext {
     None,
     Casting,
@@ -907,7 +908,8 @@ impl Namespace {
         id: &pt::Expression,
         diagnostics: &mut Diagnostics,
     ) -> Result<Type, ()> {
-        let is_polkadot = self.target.is_polkadot();
+        let max_array_dimension = sema_hooks(self).max_array_dimension();
+        let target_name = self.target.to_string();
 
         let resolve_dimensions = |ast_dimensions: &[Option<(pt::Loc, BigInt)>],
                                   diagnostics: &mut Diagnostics| {
@@ -927,12 +929,14 @@ impl Namespace {
                             "negative size of array declared".to_string(),
                         ));
                         return Err(());
-                    } else if is_polkadot && n > &u32::MAX.into() {
-                        let msg = format!(
-                            "array dimension of {n} exceeds the maximum of 4294967295 on Polkadot"
-                        );
-                        diagnostics.push(Diagnostic::decl_error(*loc, msg));
-                        return Err(());
+                    } else if let Some(max_dimension) = &max_array_dimension {
+                        if n > max_dimension {
+                            let msg = format!(
+                                "array dimension of {n} exceeds the maximum of {max_dimension} on {target_name}"
+                            );
+                            diagnostics.push(Diagnostic::decl_error(*loc, msg));
+                            return Err(());
+                        }
                     }
                     dimensions.push(ArrayLength::Fixed(n.clone()));
                 } else {
@@ -1192,14 +1196,11 @@ impl Namespace {
                         Type::Address(true)
                     }
                 }
-                _ => {
-                    let mut ty = Type::from(ty);
-                    // Apply Soroban integer width rounding if target is Soroban
-                    if self.target == Target::Soroban {
-                        ty = ty.round_soroban_width(self, id.loc());
-                    }
-                    ty
-                }
+                _ => sema_hooks(self).normalize_resolved_primitive_type(
+                    Type::from(ty),
+                    self,
+                    id.loc(),
+                ),
             };
 
             return if dimensions.is_empty() {
@@ -1238,8 +1239,9 @@ impl Namespace {
                 resolve_dimensions(&dimensions, diagnostics)?,
             )),
             Some(Symbol::Contract(_, n)) => {
-                if self.target == Target::Solana
-                    && resolve_context != ResolveTypeContext::FunctionType
+                if sema_hooks(self)
+                    .contract_type_policy(resolve_context == ResolveTypeContext::FunctionType)
+                    == ContractTypePolicy::FunctionsOnly
                 {
                     diagnostics.push(Diagnostic::error(
                         id.loc,

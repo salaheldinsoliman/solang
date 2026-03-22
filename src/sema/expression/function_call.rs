@@ -15,9 +15,12 @@ use crate::sema::expression::{ExprContext, ResolveTo};
 use crate::sema::format::string_format;
 use crate::sema::namespace::ResolveTypeContext;
 use crate::sema::symtable::Symtable;
+use crate::sema::target_hooks::{
+    sema_hooks, CallArgKind, CallArgPolicy, ContractCallArgRequirements,
+    ContractNameCallResolution, ContractNewCallPolicy, DelegatecallGasPolicy,
+};
 use crate::sema::unused_variable::check_function_call;
 use crate::sema::{builtin, using};
-use crate::Target;
 use num_bigint::{BigInt, Sign};
 use solang_parser::diagnostics::{Diagnostic, Note};
 use solang_parser::pt;
@@ -657,6 +660,8 @@ fn try_namespace(
     diagnostics: &mut Diagnostics,
     resolve_to: ResolveTo,
 ) -> Result<Option<Expression>, ()> {
+    let hooks = sema_hooks(ns);
+
     let namespace = match var {
         pt::Expression::Variable(namespace) => Some(namespace.clone()),
         pt::Expression::Type(loc, pt::Type::String) => Some(pt::Identifier {
@@ -762,25 +767,14 @@ fn try_namespace(
                 )?));
             }
 
-            // is a base contract of us
-            if let Some(contract_no) = context.contract_no {
-                if is_base(call_contract_no, contract_no, ns) {
-                    if ns.target == Target::Solana && call_args_loc.is_some() {
-                        // On Solana, assume this is an external call
-                        return contract_call_pos_args(
-                            loc,
-                            call_contract_no,
-                            func,
-                            None,
-                            args,
-                            call_args,
-                            context,
-                            ns,
-                            symtable,
-                            diagnostics,
-                            resolve_to,
-                        );
-                    } else if let Some(loc) = call_args_loc {
+            match hooks.resolve_contract_name_call(
+                call_contract_no,
+                context.contract_no,
+                call_args_loc.is_some(),
+                ns,
+            ) {
+                ContractNameCallResolution::InternalBase => {
+                    if let Some(loc) = call_args_loc {
                         diagnostics.push(Diagnostic::error(
                             loc,
                             "call arguments not allowed on internal calls".to_string(),
@@ -807,30 +801,26 @@ fn try_namespace(
                         symtable,
                         diagnostics,
                     )?));
-                } else if ns.target != Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        "function calls via contract name are only valid for base contracts".into(),
-                    ));
                 }
-            }
-
-            if ns.target == Target::Solana {
-                // If the symbol resolves to a contract, this is an external call on Solana
-                // regardless of whether we are inside a contract or not.
-                return contract_call_pos_args(
-                    loc,
-                    call_contract_no,
-                    func,
-                    None,
-                    args,
-                    call_args,
-                    context,
-                    ns,
-                    symtable,
-                    diagnostics,
-                    resolve_to,
-                );
+                ContractNameCallResolution::External => {
+                    return contract_call_pos_args(
+                        loc,
+                        call_contract_no,
+                        func,
+                        None,
+                        args,
+                        call_args,
+                        context,
+                        ns,
+                        symtable,
+                        diagnostics,
+                        resolve_to,
+                    );
+                }
+                ContractNameCallResolution::RejectNonBase { message } => {
+                    diagnostics.push(Diagnostic::error(*loc, message));
+                }
+                ContractNameCallResolution::Ignore => {}
             }
         }
     }
@@ -1292,16 +1282,8 @@ fn try_type_method(
 
         Type::Address(is_payable) => {
             if func.name == "transfer" || func.name == "send" {
-                if ns.target == Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        format!(
-                            "method '{}' not available on Solana. Use the lamports \
-                        field from the AccountInfo struct directly to operate on balances.",
-                            func.name
-                        ),
-                    ));
-
+                if let Some(message) = sema_hooks(ns).address_value_transfer_error(&func.name) {
+                    diagnostics.push(Diagnostic::error(*loc, message));
                     return Err(());
                 }
 
@@ -1369,12 +1351,7 @@ fn try_type_method(
                 };
             }
 
-            let ty = match func.name.as_str() {
-                "call" => Some(CallTy::Regular),
-                "delegatecall" if ns.target != Target::Solana => Some(CallTy::Delegate),
-                "staticcall" if ns.target == Target::EVM => Some(CallTy::Static),
-                _ => None,
-            };
+            let ty = sema_hooks(ns).address_raw_call_type(&func.name);
 
             if let Some(ty) = ty {
                 let call_args = parse_call_args(
@@ -1397,7 +1374,11 @@ fn try_type_method(
                     return Err(());
                 }
 
-                if ty == CallTy::Delegate && ns.target.is_polkadot() && call_args.gas.is_some() {
+                if ty == CallTy::Delegate
+                    && sema_hooks(ns).delegatecall_gas_policy()
+                        == DelegatecallGasPolicy::WarnIgnored
+                    && call_args.gas.is_some()
+                {
                     diagnostics.push(Diagnostic::warning(
                         *loc,
                         "'gas' specified on 'delegatecall' will be ignored".into(),
@@ -1531,7 +1512,7 @@ pub(super) fn method_call_pos_args(
             &mut Diagnostics::default(),
         ) {
             if let Some(callee_contract) =
-                is_solana_external_call(&list, context.contract_no, &call_args_loc, ns)
+                target_external_contract_call(&list, context.contract_no, call_args_loc, ns)
             {
                 if let Some(resolved_call) = contract_call_pos_args(
                     &var.loc(),
@@ -1674,6 +1655,8 @@ pub(super) fn method_call_named_args(
     diagnostics: &mut Diagnostics,
     resolve_to: ResolveTo,
 ) -> Result<Expression, ()> {
+    let hooks = sema_hooks(ns);
+
     if let pt::Expression::Variable(namespace) = var {
         let id_path = pt::IdentifierPath {
             loc: *loc,
@@ -1743,25 +1726,14 @@ pub(super) fn method_call_named_args(
                 );
             }
 
-            // is a base contract of us
-            if let Some(contract_no) = context.contract_no {
-                if is_base(call_contract_no, contract_no, ns) {
-                    if ns.target == Target::Solana && call_args_loc.is_some() {
-                        // If on Solana, assume this is an external call
-                        return contract_call_named_args(
-                            loc,
-                            None,
-                            func_name,
-                            args,
-                            call_args,
-                            call_contract_no,
-                            context,
-                            symtable,
-                            ns,
-                            diagnostics,
-                            resolve_to,
-                        );
-                    } else if let Some(loc) = call_args_loc {
+            match hooks.resolve_contract_name_call(
+                call_contract_no,
+                context.contract_no,
+                call_args_loc.is_some(),
+                ns,
+            ) {
+                ContractNameCallResolution::InternalBase => {
+                    if let Some(loc) = call_args_loc {
                         diagnostics.push(Diagnostic::error(
                             loc,
                             "call arguments not allowed on internal calls".to_string(),
@@ -1787,30 +1759,26 @@ pub(super) fn method_call_named_args(
                         symtable,
                         diagnostics,
                     );
-                } else if ns.target != Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        *loc,
-                        "function calls via contract name are only valid for base contracts".into(),
-                    ));
                 }
-            }
-
-            if ns.target == Target::Solana {
-                // If the identifier symbol resolves to a contract, this an external call on Solana
-                // regardless of whether we are inside a contract or not.
-                return contract_call_named_args(
-                    loc,
-                    None,
-                    func_name,
-                    args,
-                    call_args,
-                    call_contract_no,
-                    context,
-                    symtable,
-                    ns,
-                    diagnostics,
-                    resolve_to,
-                );
+                ContractNameCallResolution::External => {
+                    return contract_call_named_args(
+                        loc,
+                        None,
+                        func_name,
+                        args,
+                        call_args,
+                        call_contract_no,
+                        context,
+                        symtable,
+                        ns,
+                        diagnostics,
+                        resolve_to,
+                    );
+                }
+                ContractNameCallResolution::RejectNonBase { message } => {
+                    diagnostics.push(Diagnostic::error(*loc, message));
+                }
+                ContractNameCallResolution::Ignore => {}
             }
         }
     }
@@ -1826,7 +1794,7 @@ pub(super) fn method_call_named_args(
             &mut Diagnostics::default(),
         ) {
             if let Some(callee_contract) =
-                is_solana_external_call(&list, context.contract_no, &call_args_loc, ns)
+                target_external_contract_call(&list, context.contract_no, call_args_loc, ns)
             {
                 return contract_call_named_args(
                     &var.loc(),
@@ -1971,56 +1939,59 @@ pub(super) fn parse_call_args(
     }
 
     let mut res = CallArgs::default();
+    let hooks = sema_hooks(ns);
 
     for arg in args.values() {
-        match arg.name.name.as_str() {
-            "value" => {
-                if ns.target == Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        "Solana Cross Program Invocation (CPI) cannot transfer native value. See https://solang.readthedocs.io/en/latest/language/functions.html#value_transfer".to_string(),
-                    ));
+        let Some(arg_kind) = CallArgKind::from_name(arg.name.name.as_str()) else {
+            diagnostics.push(Diagnostic::error(
+                arg.loc,
+                format!("'{}' not a valid call parameter", arg.name.name),
+            ));
+            return Err(());
+        };
 
-                    expression(
-                        &arg.expr,
-                        context,
-                        ns,
-                        symtable,
-                        diagnostics,
-                        ResolveTo::Unknown,
-                    )?;
-                } else {
-                    let ty = Type::Value;
+        if let CallArgPolicy::Rejected { message, recover } =
+            hooks.call_arg_policy(arg_kind, external_call, ns)
+        {
+            diagnostics.push(Diagnostic::error(arg.loc, message));
 
-                    let expr = expression(
-                        &arg.expr,
-                        context,
-                        ns,
-                        symtable,
-                        diagnostics,
-                        ResolveTo::Type(&ty),
-                    )?;
-
-                    res.value = Some(Box::new(expr.cast(
-                        &arg.expr.loc(),
-                        &ty,
-                        true,
-                        ns,
-                        diagnostics,
-                    )?));
-                }
+            if recover {
+                expression(
+                    &arg.expr,
+                    context,
+                    ns,
+                    symtable,
+                    diagnostics,
+                    ResolveTo::Unknown,
+                )?;
+                continue;
             }
-            "gas" => {
-                if ns.target == Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        format!(
-                            "'gas' not permitted for external calls or constructors on {}",
-                            ns.target
-                        ),
-                    ));
-                    return Err(());
-                }
+
+            return Err(());
+        }
+
+        match arg_kind {
+            CallArgKind::Value => {
+                let ty = Type::Value;
+
+                let expr = expression(
+                    &arg.expr,
+                    context,
+                    ns,
+                    symtable,
+                    diagnostics,
+                    ResolveTo::Type(&ty),
+                )?;
+
+                res.value = Some(Box::new(expr.cast(
+                    &arg.expr.loc(),
+                    &ty,
+                    true,
+                    ns,
+                    diagnostics,
+                )?));
+            }
+            CallArgKind::Gas => {
                 let ty = Type::Uint(64);
 
                 let expr = expression(
@@ -2040,18 +2011,7 @@ pub(super) fn parse_call_args(
                     diagnostics,
                 )?));
             }
-            "salt" => {
-                if ns.target == Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        format!(
-                            "'salt' not permitted for external calls or constructors on {}",
-                            ns.target
-                        ),
-                    ));
-                    return Err(());
-                }
-
+            CallArgKind::Salt => {
                 if external_call {
                     diagnostics.push(Diagnostic::error(
                         arg.loc,
@@ -2079,18 +2039,7 @@ pub(super) fn parse_call_args(
                     diagnostics,
                 )?));
             }
-            "accounts" => {
-                if ns.target != Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        format!(
-                            "'accounts' not permitted for external calls or constructors on {}",
-                            ns.target
-                        ),
-                    ));
-                    return Err(());
-                }
-
+            CallArgKind::Accounts => {
                 if let pt::Expression::ArrayLiteral(_, vec) = &arg.expr {
                     if vec.is_empty() {
                         res.accounts = ExternalCallAccounts::NoAccount;
@@ -2137,18 +2086,7 @@ pub(super) fn parse_call_args(
 
                 res.accounts = ExternalCallAccounts::Present(Box::new(expr));
             }
-            "seeds" => {
-                if ns.target != Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        format!(
-                            "'seeds' not permitted for external calls or constructors on {}",
-                            ns.target
-                        ),
-                    ));
-                    return Err(());
-                }
-
+            CallArgKind::Seeds => {
                 // sol_invoke_signed_c() takes of a slice of a slice of slice of bytes
                 // 1. A single seed value is a slice of bytes.
                 // 2. A signer for single address can have multiple seeds
@@ -2166,18 +2104,7 @@ pub(super) fn parse_call_args(
 
                 res.seeds = Some(expr.cast(&expr.loc(), &ty, true, ns, diagnostics)?.into());
             }
-            "program_id" => {
-                if ns.target != Target::Solana {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        format!(
-                            "'program_id' not permitted for external calls or constructors on {}",
-                            ns.target
-                        ),
-                    ));
-                    return Err(());
-                }
-
+            CallArgKind::ProgramId => {
                 let ty = Type::Address(false);
                 let expr = expression(
                     &arg.expr,
@@ -2190,15 +2117,7 @@ pub(super) fn parse_call_args(
 
                 res.program_id = Some(Box::new(expr));
             }
-            "flags" => {
-                if !(ns.target.is_polkadot() && external_call) {
-                    diagnostics.push(Diagnostic::error(
-                        arg.loc,
-                        "'flags' are only permitted for external calls on polkadot".into(),
-                    ));
-                    return Err(());
-                }
-
+            CallArgKind::Flags => {
                 let ty = Type::Uint(32);
                 let expr = expression(
                     &arg.expr,
@@ -2211,17 +2130,12 @@ pub(super) fn parse_call_args(
                 let flags = expr.cast(&arg.expr.loc(), &ty, true, ns, diagnostics)?;
                 res.flags = Some(flags.into());
             }
-            _ => {
-                diagnostics.push(Diagnostic::error(
-                    arg.loc,
-                    format!("'{}' not a valid call parameter", arg.name.name),
-                ));
-                return Err(());
-            }
         }
     }
 
-    if ns.target == Target::Solana {
+    if hooks.contract_call_arg_requirements()
+        == ContractCallArgRequirements::RequireAccountsAndProgramId
+    {
         if res.accounts.is_absent()
             && !matches!(
                 ns.functions[context.function_no.unwrap()].visibility,
@@ -3105,27 +3019,15 @@ fn contract_call_pos_args(
     }
 }
 
-/// Checks if an identifier path is an external call on Solana.
+/// Checks if an identifier path should be treated as an external contract call.
 /// For instance, my_file.my_contract.my_func() may be a call to a contract.
-fn is_solana_external_call(
+fn target_external_contract_call(
     list: &[(pt::Loc, usize)],
     contract_no: Option<usize>,
-    call_args_loc: &Option<pt::Loc>,
+    call_args_loc: Option<pt::Loc>,
     ns: &Namespace,
 ) -> Option<usize> {
-    if ns.target == Target::Solana
-        && list.len() == 1
-        && ns.functions[list[0].1].contract_no != contract_no
-    {
-        if let (Some(callee), Some(caller)) = (ns.functions[list[0].1].contract_no, contract_no) {
-            if is_base(callee, caller, ns) && call_args_loc.is_none() {
-                return None;
-            }
-        }
-        return ns.functions[list[0].1].contract_no;
-    }
-
-    None
+    sema_hooks(ns).identifier_path_external_contract(list, contract_no, call_args_loc, ns)
 }
 
 /// Data structure to manage the returns of 'preprocess_contract_call'
@@ -3179,7 +3081,9 @@ fn preprocess_contract_call<T>(
         name_matches.push(*function_no);
     }
 
-    if ns.target == Target::Solana && func.name == "new" {
+    if func.name == "new"
+        && sema_hooks(ns).contract_new_call_policy() == ContractNewCallPolicy::TreatAsConstructor
+    {
         solana_constructor_check(
             loc,
             external_contract_no,

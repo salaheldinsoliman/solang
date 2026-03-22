@@ -19,6 +19,7 @@ mod statements;
 mod storage;
 mod strength_reduce;
 pub(crate) mod subexpression_elimination;
+pub(crate) mod target;
 mod tests;
 mod undefined_variable;
 mod unused_variable;
@@ -31,6 +32,7 @@ use self::{
     dispatch::function_dispatch,
     expression::expression,
     solana_accounts::account_collection::collect_accounts_from_contract,
+    target::target_codegen,
     vartable::Vartable,
 };
 use crate::sema::ast::{
@@ -47,7 +49,6 @@ use crate::sema::eval::eval_const_number;
 use crate::sema::Recurse;
 #[cfg(feature = "wasm_opt")]
 use contract_build::OptimizationPasses;
-use encoding::soroban_encoding::soroban_encode_arg;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{FromPrimitive, Zero};
@@ -369,16 +370,21 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
     // note the single `:` to prevent a name clash with user-declared functions
     let mut cfg = ControlFlowGraph::new(STORAGE_INITIALIZER.to_string(), ASTFunction::None);
     let mut vartab = Vartable::new(ns.next_id);
+    let target = target_codegen(ns);
 
     for layout in &ns.contracts[contract_no].layout {
         let var = &ns.contracts[layout.contract_no].variables[layout.var_no];
 
-        let mut value = if let Some(init) = &var.initializer {
+        let value = if let Some(init) = &var.initializer {
             expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt)
-        } else if ns.target == Target::Soroban && var.ty.is_dynamic_memory() {
-            soroban::soroban_vec_new(&var.loc, &var.ty, &mut cfg, &mut vartab)
         } else {
-            continue;
+            let Some(default_value) =
+                target.storage_initializer_default(&var.loc, &var.ty, &mut cfg, &mut vartab, ns)
+            else {
+                continue;
+            };
+
+            default_value
         };
 
         let storage = ns.contracts[contract_no].get_storage_slot(
@@ -389,11 +395,7 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
             None,
         );
 
-        //let mut value = expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt);
-
-        if ns.target == Target::Soroban {
-            value = soroban_encode_arg(value, &mut cfg, &mut vartab, ns);
-        }
+        let value = target.store_storage(value, &mut cfg, &mut vartab, ns);
 
         cfg.add(
             &mut vartab,

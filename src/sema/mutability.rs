@@ -11,8 +11,8 @@ use super::{
 };
 use crate::sema::ast::SolanaAccount;
 use crate::sema::solana_accounts::BuiltinAccounts;
+use crate::sema::target_hooks::{sema_hooks, DataAccountPolicy};
 use crate::sema::yul::builtin::YulBuiltInFunction;
-use crate::Target;
 use bitflags::bitflags;
 use solang_parser::pt::Loc;
 use solang_parser::{helpers::CodeLocation, pt};
@@ -216,7 +216,9 @@ fn check_mutability(func: &Function, ns: &Namespace) -> Diagnostics {
         }
     }
 
-    if state.data_account != DataAccountUsage::NONE && ns.target == Target::Solana {
+    if state.data_account != DataAccountUsage::NONE
+        && sema_hooks(ns).data_account_policy() == DataAccountPolicy::AutoInsert
+    {
         func.solana_accounts.borrow_mut().insert(
             BuiltinAccounts::DataAccount.to_string(),
             SolanaAccount {

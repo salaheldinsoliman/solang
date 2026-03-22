@@ -11,7 +11,10 @@ use super::{
     ContractDefinition, SOLANA_SPARSE_ARRAY_SIZE,
 };
 use crate::sema::namespace::ResolveTypeContext;
-use crate::Target;
+use crate::sema::target_hooks::{
+    sema_hooks, ContractAnnotationPolicy, ExternalFunctionTypePolicy, IndexedEventFieldPolicy,
+    StorageLayoutPolicy, StructOffsetPolicy,
+};
 use base58::{FromBase58, FromBase58Error};
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -622,7 +625,9 @@ fn contract_annotations(
     let mut seen_program_id = None;
 
     for note in annotations {
-        if ns.target != Target::Solana || note.id.name != "program_id" {
+        if sema_hooks(ns).contract_annotation_policy() != ContractAnnotationPolicy::ProgramId
+            || note.id.name != "program_id"
+        {
             ns.diagnostics.push(Diagnostic::error(
                 note.loc,
                 format!(
@@ -859,7 +864,10 @@ fn event_decl(
                 loc: name.loc,
             })
         } else {
-            if ns.target.is_polkadot() && field.indexed {
+            if sema_hooks(ns).indexed_event_field_policy()
+                == IndexedEventFieldPolicy::RequireNamedIndexedFields
+                && field.indexed
+            {
                 ns.diagnostics.push(Diagnostic::error(
                     field.loc,
                     "indexed event fields must have a name on polkadot".into(),
@@ -1124,7 +1132,9 @@ fn struct_offsets(ns: &mut Namespace) {
 
                 offsets.push(offset.clone());
 
-                if !field.infinite_size && ns.target == Target::Solana {
+                if !field.infinite_size
+                    && sema_hooks(ns).struct_offset_policy() == StructOffsetPolicy::AddFieldSize
+                {
                     offset += field.ty.solana_storage_size(ns);
                 }
             }
@@ -1419,7 +1429,10 @@ impl Type {
             Type::InternalFunction { .. } => false,
             // On EVM, an external function is saved on an 256-bit register, so it is not
             // a reference type.
-            Type::ExternalFunction { .. } => ns.target != Target::EVM,
+            Type::ExternalFunction { .. } => {
+                sema_hooks(ns).external_function_type_policy()
+                    == ExternalFunctionTypePolicy::FixedReference
+            }
             Type::Slice(_) => false,
             Type::Unresolved => false,
             Type::FunctionSelector => false,
@@ -1720,7 +1733,7 @@ impl Type {
     /// Calculate how many storage slots a type occupies. Note that storage arrays can
     /// be very large
     pub fn storage_slots(&self, ns: &Namespace) -> BigInt {
-        if ns.target == Target::Solana {
+        if sema_hooks(ns).storage_layout_policy() == StorageLayoutPolicy::Solana {
             match self {
                 Type::Enum(_) => BigInt::one(),
                 Type::Bool => BigInt::one(),
@@ -1804,7 +1817,7 @@ impl Type {
 
     /// Alignment of elements in storage
     pub fn storage_align(&self, ns: &Namespace) -> BigInt {
-        if ns.target == Target::Solana {
+        if sema_hooks(ns).storage_layout_policy() == StorageLayoutPolicy::Solana {
             let length = match self {
                 Type::Enum(_) => BigInt::one(),
                 Type::Bool => BigInt::one(),
@@ -1869,7 +1882,10 @@ impl Type {
             Type::InternalFunction { .. } => false,
             // On EVM, an external function is saved on an 256-bit register, so it is not
             // a reference type.
-            Type::ExternalFunction { .. } => ns.target != Target::EVM,
+            Type::ExternalFunction { .. } => {
+                sema_hooks(ns).external_function_type_policy()
+                    == ExternalFunctionTypePolicy::FixedReference
+            }
             Type::UserType(no) => ns.user_types[*no].ty.is_reference_type(ns),
             _ => false,
         }

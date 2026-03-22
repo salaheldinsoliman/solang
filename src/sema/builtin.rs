@@ -13,6 +13,7 @@ use crate::sema::{
     expression::{function_call::evaluate_argument, resolve_expression::expression},
     namespace::ResolveTypeContext,
     statements::parameter_list_to_expr_list,
+    target_hooks::{sema_hooks, BuiltinVarPolicy, GaspriceCallPolicy},
 };
 use crate::Target;
 use num_bigint::BigInt;
@@ -926,28 +927,13 @@ pub fn builtin_var(
         .find(|p| p.name == fname && p.namespace == namespace)
     {
         if p.target.is_empty() || p.target.contains(&ns.target) {
-            if ns.target.is_polkadot() && p.builtin == Builtin::Gasprice {
+            if sema_hooks(ns).builtin_var_policy(p.builtin) == BuiltinVarPolicy::Error {
                 diagnostics.push(Diagnostic::error(
                     *loc,
-                    String::from(
-                        "use the function 'tx.gasprice(gas)' in stead, as 'tx.gasprice' may round down to zero. See https://solang.readthedocs.io/en/latest/language/builtins.html#gasprice",
-                    ),
-                ));
-            }
-            if ns.target == Target::Solana && p.builtin == Builtin::Value {
-                diagnostics.push(Diagnostic::error(
-                    *loc,
-                    String::from(
-                        "Solana Cross Program Invocation (CPI) cannot transfer native value. See https://solang.readthedocs.io/en/latest/language/functions.html#value_transfer",
-                    ),
-                ));
-            }
-            if ns.target == Target::Solana && p.builtin == Builtin::Sender {
-                diagnostics.push(Diagnostic::error(
-                    *loc,
-                    String::from(
-                        "'msg.sender' is not available on Solana. See https://solang.readthedocs.io/en/latest/targets/solana.html#msg-sender-solana",
-                    ),
+                    sema_hooks(ns)
+                        .builtin_var_error(p.builtin)
+                        .unwrap_or("builtin variable is not available on this target")
+                        .to_string(),
                 ));
             }
             return Some((p.builtin, p.ret[0].clone()));
@@ -1059,7 +1045,9 @@ pub(super) fn resolve_call(
             call_diagnostics.extend(candidate_diagnostics);
         } else {
             // tx.gasprice(1) is a bad idea, just like tx.gasprice. Warn about this
-            if ns.target.is_polkadot() && func.builtin == Builtin::Gasprice {
+            if func.builtin == Builtin::Gasprice
+                && sema_hooks(ns).gasprice_call_policy() == GaspriceCallPolicy::WarnWhenOne
+            {
                 if let Ok((_, val)) = eval_const_number(&cast_args[0], ns, diagnostics) {
                     if val == BigInt::one() {
                         diagnostics.push(Diagnostic::warning(
