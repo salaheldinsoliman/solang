@@ -68,6 +68,11 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
         // We loop over each field, call GetContractData for each field and put it in the buffer
         if let Type::Struct(ast::StructType::UserDefined(n)) = ty {
             let field_count = &bin.ns.structs[*n].fields.len();
+            let slot = if slot_ty.is_none() {
+                ensure_base_key_vec(bin, slot)
+            } else {
+                slot
+            };
 
             // call soroban_get_fields to get a buffer with all fields
             let struct_buffer =
@@ -182,6 +187,11 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
 
         if let Type::Struct(ast::StructType::UserDefined(n)) = inner_ty {
             let field_count = &bin.ns.structs[*n].fields.len();
+            let slot = if slot_ty.is_none() {
+                ensure_base_key_vec(bin, slot)
+            } else {
+                slot
+            };
 
             let data_ptr = bin.vector_bytes(dest);
 
@@ -1033,6 +1043,50 @@ impl<'a> TargetRuntime<'a> for SorobanTarget {
     ) {
         unimplemented!()
     }
+}
+
+fn ensure_base_key_vec<'a>(bin: &Binary<'a>, base_key: IntValue<'a>) -> IntValue<'a> {
+    let vec_new = bin
+        .builder
+        .build_call(
+            bin.module
+                .get_function(HostFunctions::VectorNew.name())
+                .unwrap(),
+            &[],
+            "vec_new",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap()
+        .into_int_value();
+
+    let slot_encoded = encode_value(
+        if base_key.get_type().get_bit_width() == 64 {
+            base_key
+        } else {
+            bin.builder
+                .build_int_z_extend(base_key, bin.context.i64_type(), "slot64")
+                .unwrap()
+        },
+        32,
+        4,
+        bin,
+    );
+
+    bin.builder
+        .build_call(
+            bin.module
+                .get_function(HostFunctions::VecPushBack.name())
+                .unwrap(),
+            &[vec_new.into(), slot_encoded.into()],
+            "push_root_slot",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .left()
+        .unwrap()
+        .into_int_value()
 }
 
 fn storage_type_to_int(storage_type: &Option<StorageType>) -> u64 {

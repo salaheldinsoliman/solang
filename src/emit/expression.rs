@@ -1438,8 +1438,13 @@ pub(super) fn expression<'a, T: TargetRuntime<'a> + ?Sized>(
             target.builtin(bin, e, vartab, function)
         }
         Expression::StructMember { expr, member, .. } => {
+            println!("expr is {:?}", expr);
+
             let struct_ty = bin.llvm_type(expr.ty().deref_memory());
+            
             let struct_ptr = expression(target, bin, expr, vartab, function).into_pointer_value();
+
+            println!("after expr {:?}", struct_ptr);
 
             bin.builder
                 .build_struct_gep(struct_ty, struct_ptr, *member as u32, "struct member")
@@ -2201,6 +2206,7 @@ fn runtime_cast<'a>(
     to: &Type,
     val: BasicValueEnum<'a>,
 ) -> BasicValueEnum<'a> {
+    println!("casting from {:?} to {:?}", from, to);
     match (from, to) {
         // no conversion needed
         (from, to) if from == to => val,

@@ -1073,8 +1073,8 @@ impl<'a> Binary<'a> {
 
         let allocator = if self.ns.target == Target::Soroban {
             self.builder.build_call(
-                self.module.get_function("soroban_alloc_init").unwrap(),
-                &[size.into(), init.into()],
+                self.module.get_function("soroban_vector_new").unwrap(),
+                &[size.into(), elem_size.into(), init.into()],
                 "soroban_alloc",
             )
         } else {

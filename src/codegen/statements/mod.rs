@@ -12,10 +12,10 @@ use super::{
     yul::inline_assembly_cfg,
     Builtin, Expression, Options,
 };
-use crate::sema::ast::{
+use crate::{Target, sema::ast::{
     self, ArrayLength, DestructureField, Function, Namespace, RetrieveType, SolanaAccount,
-    Statement, Type, Type::Uint,
-};
+    Statement, Type::{self, Uint},
+}};
 use crate::sema::solana_accounts::BuiltinAccounts;
 use crate::sema::Recurse;
 use num_bigint::BigInt;
@@ -58,7 +58,8 @@ pub(crate) fn statement(
                 }
             }
         }
-        Statement::VariableDecl(loc, pos, _, Some(init)) => {
+        Statement::VariableDecl(loc, pos, ty, Some(init)) => {
+            let left_ty = ty;
             if should_remove_variable(*pos, func, opt, ns) {
                 let mut params = SideEffectsCheckParameters {
                     cfg,
@@ -74,6 +75,8 @@ pub(crate) fn statement(
             }
 
             let mut expression = expression(init, cfg, contract_no, Some(func), ns, vartab, opt);
+
+            println!("expression is {:?}", expression);
 
             // Let's check if the declaration is a declaration of a dynamic array
             if let Expression::AllocDynamicBytes {
@@ -105,14 +108,29 @@ pub(crate) fn statement(
                     initializer: opt,
                 };
                 cfg.array_lengths_temps.insert(*pos, temp_res);
-            } else if let Expression::Variable { var_no, .. } = &expression {
+            } else if let Expression::Variable { var_no,ty, .. } = expression.clone() {
                 // If declaration happens with an existing array, check if the size of the array is known.
                 // If the size of the right hand side is known (is in the array_length_map), make the left hand side track it
                 // Now, we will have two keys in the map that point to the same temporary variable
-                if let Some(to_add) = cfg.array_lengths_temps.clone().get(var_no) {
+                //expression.cast(to, ns)
+                println!("ty is {:?}", ty);
+                
+                if let Some(to_add) = cfg.array_lengths_temps.clone().get(&var_no) {
                     cfg.array_lengths_temps.insert(*pos, *to_add);
                 }
             }
+
+            let right_ty = expression.ty();
+
+            if ns.target == Target::Soroban && right_ty.has_soroban_handle() {
+                println!("changing left ty from {:?} to {:?}", left_ty, ty);
+                //expression = expression.set_ty(ty.clone());
+                vartab.vars.get_mut(pos).unwrap().ty = right_ty.clone();
+            }
+
+
+
+            println!("expression var after {:?}", expression);
 
             cfg.add(
                 vartab,

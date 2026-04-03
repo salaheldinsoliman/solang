@@ -3,6 +3,9 @@
 use std::process::Command;
 
 fn main() {
+    println!("cargo:rerun-if-changed=stdlib");
+    println!("cargo:rerun-if-changed=src/linker/linker.cpp");
+
     #[cfg(feature = "llvm")]
     {
         let status = Command::new("make")

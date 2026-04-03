@@ -100,8 +100,7 @@ fn generate_import_section(section: SectionLimited<Import>, module: &mut Module)
             // Soroban-native shape: modulename.funcname
             imports.import(mod_name, func_name, import_type);
         } else {
-            //imports.import(import.module, &import.name, import_type);
-            unreachable!()
+            imports.import(import.module, import.name, import_type);
         }
     }
 

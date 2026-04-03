@@ -4,6 +4,7 @@ pub(super) mod target;
 use crate::codegen::{cfg::ControlFlowGraph, HostFunctions, Options};
 
 use crate::emit::cfg::emit_cfg;
+use crate::sema::ast::StructType;
 use crate::{emit::Binary, sema::ast};
 use funty::Fundamental;
 use inkwell::{
@@ -13,8 +14,10 @@ use inkwell::{
 };
 use soroban_sdk::xdr::{
     Limited, Limits, ScEnvMetaEntry, ScEnvMetaEntryInterfaceVersion, ScSpecEntry,
-    ScSpecFunctionInputV0, ScSpecFunctionV0, ScSpecTypeDef, ScSpecTypeVec, StringM, WriteXdr,
+    ScSpecFunctionInputV0, ScSpecFunctionV0, ScSpecTypeDef, ScSpecTypeUdt,
+    ScSpecTypeVec, ScSpecUdtStructFieldV0, ScSpecUdtStructV0, StringM, WriteXdr,
 };
+use std::collections::BTreeSet;
 
 const SOROBAN_ENV_INTERFACE_VERSION: ScEnvMetaEntryInterfaceVersion =
     ScEnvMetaEntryInterfaceVersion {
@@ -97,6 +100,10 @@ impl HostFunctions {
                 .context
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into(), ty.into()], false),
+            HostFunctions::MapUnpackToLinearMemory => bin
+                .context
+                .i64_type()
+                .fn_type(&[ty.into(), ty.into(), ty.into(), ty.into()], false),
 
             HostFunctions::MapNew => bin.context.i64_type().fn_type(&[], false),
 
@@ -104,6 +111,7 @@ impl HostFunctions {
                 .context
                 .i64_type()
                 .fn_type(&[ty.into(), ty.into(), ty.into()], false),
+            HostFunctions::MapKeys => bin.context.i64_type().fn_type(&[ty.into()], false),
 
             HostFunctions::VecPushBack => bin
                 .context
@@ -163,10 +171,152 @@ impl HostFunctions {
 pub struct SorobanTarget;
 
 impl SorobanTarget {
-    fn vec_spec_type(ty: &ast::Type) -> ScSpecTypeDef {
+    fn udt_struct_name(struct_def: &ast::StructDecl) -> String {
+        match &struct_def.contract {
+            Some(contract_name) => format!("{contract_name}.{}", struct_def.id.name),
+            None => struct_def.id.name.to_string(),
+        }
+    }
+
+    fn struct_spec_type<'a>(ty: &ast::StructType, ns: &'a ast::Namespace) -> ScSpecTypeDef {
+        match ty {
+            StructType::UserDefined(no) => ScSpecTypeDef::Udt(ScSpecTypeUdt {
+                name: Self::udt_struct_name(&ns.structs[*no])
+                    .try_into()
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "struct '{}' UDT name exceeds Soroban limit",
+                            ns.structs[*no].id.name
+                        )
+                    }),
+            }),
+            _ => panic!("unsupported struct type in Soroban spec: {ty:?}"),
+        }
+    }
+
+    fn collect_udt_structs_from_type(
+        ty: &ast::Type,
+        ns: &ast::Namespace,
+        collected: &mut BTreeSet<usize>,
+    ) {
+        match ty {
+            ast::Type::Struct(StructType::UserDefined(no)) => {
+                if collected.insert(*no) {
+                    for field in &ns.structs[*no].fields {
+                        let field_ty = match &field.ty {
+                            ast::Type::Ref(inner) | ast::Type::SorobanHandle(inner) => {
+                                inner.as_ref()
+                            }
+                            _ => &field.ty,
+                        };
+                        Self::collect_udt_structs_from_type(field_ty, ns, collected);
+                    }
+                }
+            }
+            ast::Type::Array(inner, _)
+            | ast::Type::Ref(inner)
+            | ast::Type::StorageRef(_, inner)
+            | ast::Type::Slice(inner)
+            | ast::Type::SorobanHandle(inner) => {
+                Self::collect_udt_structs_from_type(inner.as_ref(), ns, collected);
+            }
+            ast::Type::Mapping(mapping) => {
+                Self::collect_udt_structs_from_type(mapping.key.as_ref(), ns, collected);
+                Self::collect_udt_structs_from_type(mapping.value.as_ref(), ns, collected);
+            }
+            ast::Type::InternalFunction { params, returns, .. }
+            | ast::Type::ExternalFunction { params, returns, .. } => {
+                for p in params {
+                    Self::collect_udt_structs_from_type(p, ns, collected);
+                }
+                for r in returns {
+                    Self::collect_udt_structs_from_type(r, ns, collected);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn emit_udt_struct_spec_entries<'a>(
+        context: &'a Context,
+        contract: &'a ast::Contract,
+        bin: &mut Binary<'a>,
+        ns: &'a ast::Namespace,
+    ) {
+        let mut udt_struct_nos = BTreeSet::new();
+
+        for cfg in contract.cfg.iter().filter(|cfg| cfg.public && !cfg.is_placeholder()) {
+            for p in cfg.params.iter() {
+                let ty = match &p.ty {
+                    ast::Type::Ref(inner) | ast::Type::SorobanHandle(inner) => inner.as_ref(),
+                    _ => &p.ty,
+                };
+                Self::collect_udt_structs_from_type(ty, ns, &mut udt_struct_nos);
+            }
+
+            for r in cfg.returns.iter() {
+                let ty = match &r.ty {
+                    ast::Type::Ref(inner) | ast::Type::SorobanHandle(inner) => inner.as_ref(),
+                    _ => &r.ty,
+                };
+                Self::collect_udt_structs_from_type(ty, ns, &mut udt_struct_nos);
+            }
+        }
+
+        for no in udt_struct_nos {
+            let struct_def = &ns.structs[no];
+            let fields = struct_def
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(i, field)| {
+                    let field_ty = match &field.ty {
+                        ast::Type::Ref(inner) | ast::Type::SorobanHandle(inner) => inner.as_ref(),
+                        _ => &field.ty,
+                    };
+
+                    ScSpecUdtStructFieldV0 {
+                        doc: StringM::default(),
+                        name: field
+                            .id
+                            .as_ref()
+                            .map(|id| id.to_string())
+                            .unwrap_or_else(|| i.to_string())
+                            .try_into()
+                            .expect("struct field name exceeds limit"),
+                        type_: Self::spec_type(field_ty, ns),
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let mut spec = Limited::new(Vec::new(), Limits::none());
+
+            ScSpecEntry::UdtStructV0(ScSpecUdtStructV0 {
+                doc: StringM::default(),
+                lib: StringM::default(),
+                name: Self::udt_struct_name(struct_def)
+                    .try_into()
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "struct '{}' UDT name exceeds Soroban limit",
+                            struct_def.id.name
+                        )
+                    }),
+                fields: fields
+                    .try_into()
+                    .expect("struct field count exceeds Soroban limit"),
+            })
+            .write_xdr(&mut spec)
+            .unwrap_or_else(|_| panic!("writing UDT struct spec to xdr for {}", struct_def.id.name));
+
+            Self::add_custom_section(context, &bin.module, "contractspecv0", spec.inner);
+        }
+    }
+
+    fn spec_type<'a>(ty: &ast::Type, ns: &'a ast::Namespace) -> ScSpecTypeDef {
         match ty {
             ast::Type::Array(nested, _) => {
-                let nested = Self::vec_spec_type(nested.as_ref());
+                let nested = Self::spec_type(nested.as_ref(), ns);
                 ScSpecTypeDef::Vec(Box::new(ScSpecTypeVec {
                     element_type: Box::new(nested),
                 }))
@@ -178,12 +328,18 @@ impl SorobanTarget {
             ast::Type::Int(64) => ScSpecTypeDef::I64,
             ast::Type::Int(128) => ScSpecTypeDef::I128,
             ast::Type::Uint(128) => ScSpecTypeDef::U128,
+            ast::Type::Int(256) => ScSpecTypeDef::I256,
+            ast::Type::Uint(256) => ScSpecTypeDef::U256,
+            ast::Type::Int(_) => ScSpecTypeDef::I32,
             ast::Type::Bool => ScSpecTypeDef::Bool,
             ast::Type::Address(_) => ScSpecTypeDef::Address,
             ast::Type::Bytes(_) => ScSpecTypeDef::Bytes,
             ast::Type::String => ScSpecTypeDef::String,
-            ast::Type::Ref(inner) => Self::vec_spec_type(inner.as_ref()),
-            ast::Type::SorobanHandle(inner) => Self::vec_spec_type(inner.as_ref()),
+            ast::Type::Struct(ty) => Self::struct_spec_type(ty, ns),
+            ast::Type::Ref(inner) | ast::Type::SorobanHandle(inner) => {
+                Self::spec_type(inner.as_ref(), ns)
+            }
+            ast::Type::Void => ScSpecTypeDef::Void,
             _ => panic!("unsupported array element type {ty:?}"),
         }
     }
@@ -209,7 +365,7 @@ impl SorobanTarget {
 
         let mut export_list = Vec::new();
         Self::declare_externals(&mut bin);
-        Self::emit_functions_with_spec(contract, &mut bin, context, contract_no, &mut export_list);
+        Self::emit_functions_with_spec(contract, &mut bin, context, contract_no, &mut export_list, ns);
         bin.internalize(export_list.as_slice());
 
         //Self::emit_initializer(&mut binary, ns, contract.constructors(ns).first());
@@ -227,8 +383,10 @@ impl SorobanTarget {
         context: &'a Context,
         _contract_no: usize,
         export_list: &mut Vec<&'a str>,
+        ns: &'a ast::Namespace,
     ) {
         let mut defines = Vec::new();
+        Self::emit_udt_struct_spec_entries(context, contract, bin, ns);
 
         for (cfg_no, cfg) in contract.cfg.iter().enumerate() {
             let ftype = bin.function_type(
@@ -249,7 +407,7 @@ impl SorobanTarget {
                 } else {
                     &cfg.name
                 };
-                Self::emit_function_spec_entry(context, cfg, name.to_string(), bin);
+                Self::emit_function_spec_entry(context, cfg, name.to_string(), bin, ns);
                 export_list.push(name);
                 Linkage::External
             } else {
@@ -300,6 +458,7 @@ impl SorobanTarget {
         cfg: &ControlFlowGraph,
         name: String,
         bin: &mut Binary<'a>,
+        ns: &'a ast::Namespace
     ) {
         if cfg.public && !cfg.is_placeholder() {
             // TODO: Emit custom type spec entries
@@ -326,29 +485,7 @@ impl SorobanTarget {
                                 _ => &p.ty,
                             };
 
-                            match ty {
-                                ast::Type::Uint(32) => ScSpecTypeDef::U32,
-                                ast::Type::Int(32) => ScSpecTypeDef::I32,
-                                ast::Type::Enum(_) => ScSpecTypeDef::U32,
-                                ast::Type::Uint(64) => ScSpecTypeDef::U64,
-                                &ast::Type::Int(64) => ScSpecTypeDef::I64,
-                                ast::Type::Int(128) => ScSpecTypeDef::I128,
-                                ast::Type::Uint(128) => ScSpecTypeDef::U128,
-                                ast::Type::Int(256) => ScSpecTypeDef::I256,
-                                ast::Type::Uint(256) => ScSpecTypeDef::U256,
-                                ast::Type::Bool => ScSpecTypeDef::Bool,
-                                ast::Type::Address(_) => ScSpecTypeDef::Address,
-                                ast::Type::Bytes(_) => ScSpecTypeDef::Bytes,
-                                ast::Type::String => ScSpecTypeDef::String,
-                                ast::Type::Array(ty, _) => {
-                                    let element = Self::vec_spec_type(ty.as_ref());
-
-                                    ScSpecTypeDef::Vec(Box::new(ScSpecTypeVec {
-                                        element_type: Box::new(element),
-                                    }))
-                                }
-                                _ => panic!("unsupported input type {:?}", p.ty),
-                            }
+                            Self::spec_type(ty, ns)
                         }, // TODO: Map type.
                         doc: StringM::default(), // TODO: Add doc.
                     })
@@ -364,25 +501,8 @@ impl SorobanTarget {
                             ast::Type::Ref(ty) | ast::Type::SorobanHandle(ty) => *ty,
                             _ => ret_type,
                         };
-                        match ty {
-                            ast::Type::Uint(32) => ScSpecTypeDef::U32,
-                            ast::Type::Int(32) => ScSpecTypeDef::I32,
-                            ast::Type::Enum(_) => ScSpecTypeDef::U32,
-                            ast::Type::Uint(64) => ScSpecTypeDef::U64,
-                            ast::Type::Int(64) => ScSpecTypeDef::I64,
-                            ast::Type::Int(128) => ScSpecTypeDef::I128,
-                            ast::Type::Uint(128) => ScSpecTypeDef::U128,
-                            ast::Type::Int(256) => ScSpecTypeDef::I256,
-                            ast::Type::Uint(256) => ScSpecTypeDef::U256,
-                            ast::Type::Int(_) => ScSpecTypeDef::I32,
-                            ast::Type::Bool => ScSpecTypeDef::Bool,
-                            ast::Type::Address(_) => ScSpecTypeDef::Address,
-                            ast::Type::Bytes(_) => ScSpecTypeDef::Bytes,
-                            ast::Type::String => ScSpecTypeDef::String,
-                            ast::Type::Void => ScSpecTypeDef::Void,
-                            ast::Type::Struct(_) => ScSpecTypeDef::Void, // TODO: Map struct types.
-                            _ => panic!("unsupported return type {ty:?}"),
-                        }
+
+                        Self::spec_type(&ty, ns)
                     }) // TODO: Map type.
                     .collect::<Vec<_>>()
                     .try_into()
@@ -455,8 +575,10 @@ impl SorobanTarget {
             HostFunctions::RequireAuth,
             HostFunctions::AuthAsCurrContract,
             HostFunctions::MapNewFromLinearMemory,
+            HostFunctions::MapUnpackToLinearMemory,
             HostFunctions::MapNew,
             HostFunctions::MapPut,
+            HostFunctions::MapKeys,
             HostFunctions::VecPushBack,
             HostFunctions::VecGet,
             HostFunctions::VecPut,
@@ -474,6 +596,32 @@ impl SorobanTarget {
             bin.module.add_function(
                 func.name(),
                 func.function_signature(bin),
+                Some(Linkage::External),
+            );
+        }
+
+        if bin.module.get_function("soroban_alloc_vals").is_none() {
+            bin.module.add_function(
+                "soroban_alloc_vals",
+                bin.context.ptr_type(inkwell::AddressSpace::default()).fn_type(
+                    &[bin.context.i32_type().into()],
+                    false,
+                ),
+                Some(Linkage::External),
+            );
+        }
+
+        if bin.module.get_function("soroban_vector_new").is_none() {
+            bin.module.add_function(
+                "soroban_vector_new",
+                bin.context.ptr_type(inkwell::AddressSpace::default()).fn_type(
+                    &[
+                        bin.context.i32_type().into(),
+                        bin.context.i32_type().into(),
+                        bin.context.ptr_type(inkwell::AddressSpace::default()).into(),
+                    ],
+                    false,
+                ),
                 Some(Linkage::External),
             );
         }
