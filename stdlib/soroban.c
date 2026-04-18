@@ -119,6 +119,8 @@ static void *alloc_impl(uint32_t bytes, uint32_t align)
 // -------------------- exported API --------------------
 // Forward declare so soroban_alloc can delegate to it
 struct vector *soroban_alloc_init(uint32_t members, const void *init_ptr);
+struct vector *soroban_alloc_vals(uint32_t elements);
+struct vector *soroban_vector_new(uint32_t members, uint32_t elem_size, const void *init_ptr);
 
 __attribute__((export_name("soroban_alloc"))) struct vector *soroban_alloc(uint32_t members)
 {
@@ -126,13 +128,12 @@ __attribute__((export_name("soroban_alloc"))) struct vector *soroban_alloc(uint3
     return soroban_alloc_init(members, (const void *)0);
 }
 
-__attribute__((export_name("soroban_alloc_init"))) struct vector *soroban_alloc_init(uint32_t members,
-                                                                                     const void *init_ptr)
+static struct vector *soroban_vector_new_impl(uint32_t members,
+                                              uint32_t elem_size,
+                                              const void *init_ptr)
 {
     // Emulate stdlib.c:vector_new() but allocate via alloc_impl.
-    // Note: here `members` is the number of bytes in the vector payload
-    // (element size assumed to be 1 for Soroban at present).
-    uint32_t size_array = members;
+    uint32_t size_array = members * elem_size;
 
     struct vector *v = (struct vector *)alloc_impl((uint32_t)sizeof(struct vector) + size_array, 8);
     if (v == (struct vector *)0)
@@ -160,6 +161,24 @@ __attribute__((export_name("soroban_alloc_init"))) struct vector *soroban_alloc_
     }
 
     return v;
+}
+
+__attribute__((export_name("soroban_alloc_init"))) struct vector *soroban_alloc_init(uint32_t members,
+                                                                                     const void *init_ptr)
+{
+    return soroban_vector_new_impl(members, 1, init_ptr);
+}
+
+__attribute__((export_name("soroban_alloc_vals"))) struct vector *soroban_alloc_vals(uint32_t elements)
+{
+    return soroban_vector_new_impl(elements, 8, (const void *)0);
+}
+
+__attribute__((export_name("soroban_vector_new"))) struct vector *soroban_vector_new(uint32_t members,
+                                                                                     uint32_t elem_size,
+                                                                                     const void *init_ptr)
+{
+    return soroban_vector_new_impl(members, elem_size, init_ptr);
 }
 
 __attribute__((export_name("soroban_alloc_align"))) void *soroban_alloc_align(uint32_t size, uint32_t align)

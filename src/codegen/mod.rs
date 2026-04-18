@@ -110,6 +110,7 @@ pub enum HostFunctions {
     VecUnpackToLinearMemory,
     VecLen,
     MapNewFromLinearMemory,
+    MapUnpackToLinearMemory,
     Call,
     ObjToU64,
     ObjFromU64,
@@ -133,6 +134,7 @@ pub enum HostFunctions {
     AuthAsCurrContract,
     MapNew,
     MapPut,
+    MapKeys,
     VecPushBack,
     VecPopBack,
     VecGet,
@@ -182,8 +184,10 @@ impl HostFunctions {
             HostFunctions::RequireAuth => "a.0",
             HostFunctions::AuthAsCurrContract => "a.3",
             HostFunctions::MapNewFromLinearMemory => "m.9",
+            HostFunctions::MapUnpackToLinearMemory => "m.a",
             HostFunctions::MapNew => "m._",
             HostFunctions::MapPut => "m.0",
+            HostFunctions::MapKeys => "m.7",
             HostFunctions::VecPushBack => "v.6",
             HostFunctions::StringNewFromLinearMemory => "b.i",
             HostFunctions::StrKeyToAddr => "a.1",
@@ -1838,6 +1842,59 @@ impl Expression {
             ty: Type::Address(false),
             expr: Box::new(struct_member),
         }
+    }
+
+    pub fn set_ty(&self, ty: Type) -> Expression {
+        let mut expr = self.clone();
+
+        match &mut expr {
+            Expression::Keccak256 { ty: expr_ty, .. }
+            | Expression::Undefined { ty: expr_ty }
+            | Expression::Variable { ty: expr_ty, .. }
+            | Expression::Trunc { ty: expr_ty, .. }
+            | Expression::ZeroExt { ty: expr_ty, .. }
+            | Expression::Cast { ty: expr_ty, .. }
+            | Expression::SignExt { ty: expr_ty, .. }
+            | Expression::GetRef { ty: expr_ty, .. }
+            | Expression::Load { ty: expr_ty, .. }
+            | Expression::BytesLiteral { ty: expr_ty, .. }
+            | Expression::Add { ty: expr_ty, .. }
+            | Expression::NumberLiteral { ty: expr_ty, .. }
+            | Expression::Multiply { ty: expr_ty, .. }
+            | Expression::Subtract { ty: expr_ty, .. }
+            | Expression::SignedDivide { ty: expr_ty, .. }
+            | Expression::UnsignedDivide { ty: expr_ty, .. }
+            | Expression::SignedModulo { ty: expr_ty, .. }
+            | Expression::UnsignedModulo { ty: expr_ty, .. }
+            | Expression::Power { ty: expr_ty, .. }
+            | Expression::BitwiseOr { ty: expr_ty, .. }
+            | Expression::BitwiseAnd { ty: expr_ty, .. }
+            | Expression::BitwiseXor { ty: expr_ty, .. }
+            | Expression::ShiftLeft { ty: expr_ty, .. }
+            | Expression::ShiftRight { ty: expr_ty, .. }
+            | Expression::BitwiseNot { ty: expr_ty, .. }
+            | Expression::StorageArrayLength { ty: expr_ty, .. }
+            | Expression::Negate { ty: expr_ty, .. }
+            | Expression::StructLiteral { ty: expr_ty, .. }
+            | Expression::ArrayLiteral { ty: expr_ty, .. }
+            | Expression::ConstArrayLiteral { ty: expr_ty, .. }
+            | Expression::StructMember { ty: expr_ty, .. }
+            | Expression::FunctionArg { ty: expr_ty, .. }
+            | Expression::AllocDynamicBytes { ty: expr_ty, .. }
+            | Expression::BytesCast { ty: expr_ty, .. }
+            | Expression::RationalNumberLiteral { ty: expr_ty, .. }
+            | Expression::Subscript { ty: expr_ty, .. }
+            | Expression::InternalFunctionCfg { ty: expr_ty, .. } => {
+                *expr_ty = ty.clone();
+            }
+            Expression::Builtin { tys, .. } => {
+                tys.clear();
+                tys.push(ty.clone());
+            }
+            _ => (),
+        }
+
+        expr
     }
 }
 

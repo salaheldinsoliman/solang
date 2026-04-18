@@ -115,6 +115,7 @@ pub fn soroban_decode_arg(
     ns: &Namespace,
     decode_as: Option<Type>,
 ) -> Expression {
+    println!("entered as {:?}", arg.ty());
     let ty = match decode_as {
         Some(ty) => ty,
         None => {
@@ -129,6 +130,8 @@ pub fn soroban_decode_arg(
             }
         }
     };
+
+    println!("decoding_ty {:?}", ty);
 
     match ty {
         Type::Bool => Expression::NotEqual {
@@ -149,7 +152,9 @@ pub fn soroban_decode_arg(
             decoded.cast(&Type::Enum(enum_no), ns)
         }
 
-        Type::Int(128) | Type::Uint(128) => decode_i128(wrapper_cfg, vartab, arg),
+        int128_ty @ (Type::Int(128) | Type::Uint(128)) => {
+            decode_i128(wrapper_cfg, vartab, arg, int128_ty)
+        }
 
         Type::Int(256) | Type::Uint(256) => decode_i256(wrapper_cfg, vartab, arg),
 
@@ -199,9 +204,20 @@ pub fn soroban_decode_arg(
             signed: true,
         },
         Type::Struct(StructType::UserDefined(n)) => {
+            // Handle-backed structs are MapObjects on Soroban; unpack first.
+            println!("decoding struct, arg ty is {:?}", arg.ty());
+            if arg.ty().is_soroban_handle() {
+                println!("decoding arr of sorobanhandle");
+                let unpacked_struct_buffer =
+                    unpack_map_struct_to_linear_memory(arg, n, ns, wrapper_cfg, vartab);
+                decode_struct(unpacked_struct_buffer, wrapper_cfg, vartab, n, ns, ty)
+            } else {
+                println!("decoding real struct");
             decode_struct(arg, wrapper_cfg, vartab, n, ns, ty)
+            }
         }
         Type::Array(elem_ty, _) => {
+            
             if let Type::StorageRef(_, _) = arg.ty() {
                 arg.clone()
             } else {
@@ -341,6 +357,8 @@ pub fn soroban_encode_arg(
                     }
                     _ => unreachable!(),
                 };
+
+                println!("sym new from linear mem called with arg {:?}", item);
 
                 Instr::Call {
                     res: vec![obj],
@@ -703,6 +721,7 @@ pub fn soroban_encode_arg(
             }
         }
         Type::Struct(StructType::UserDefined(n)) => {
+            println!("encoding struct, item ty is {:?}", item.ty());
             let buf = encode_struct(item.clone(), cfg, vartab, ns, n);
 
             Instr::Set {
@@ -1032,11 +1051,19 @@ fn encode_i256(
     ret
 }
 
-fn decode_i128(cfg: &mut ControlFlowGraph, vartab: &mut Vartable, arg: Expression) -> Expression {
-    let ty = match arg.ty() {
-        Type::Ref(inner_ty) => *inner_ty.clone(),
-        Type::SorobanHandle(inner_ty) => *inner_ty.clone(),
-        _ => arg.ty(),
+fn decode_i128(
+    cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+    arg: Expression,
+    int128_ty: Type,
+) -> Expression {
+    let ty = match int128_ty {
+        Type::Int(128) | Type::Uint(128) => int128_ty,
+        _ => match arg.ty() {
+            Type::Ref(inner_ty) => *inner_ty.clone(),
+            Type::SorobanHandle(inner_ty) => *inner_ty.clone(),
+            _ => arg.ty(),
+        },
     };
 
     let ret_var = vartab.temp_anonymous(&ty);
@@ -1651,6 +1678,7 @@ fn encode_struct(
     ns: &Namespace,
     struct_no: usize,
 ) -> Expression {
+    println!("encoding item {:?}", item);
     let fields = &ns.structs[struct_no].fields;
     let mut fields_vars = Vec::new();
 
@@ -1727,6 +1755,7 @@ fn decode_struct(
     ns: &Namespace,
     struct_ty: Type,
 ) -> Expression {
+    println!("decode_struct called with item {:?}", item);
     let tys = &ns.structs[struct_no]
         .fields
         .iter()
@@ -1761,6 +1790,433 @@ fn decode_struct(
         ty: struct_ty,
         values: members,
     }
+}
+
+/// Unpack a Soroban map-backed struct object into linear memory and return
+/// a pointer to the unpacked values buffer.
+///
+/// The helper materializes two temporary linear-memory arrays:
+/// - keys buffer containing `(u32 ptr, u32 len)` guest slices for field names
+/// - values buffer receiving the unpacked Vals
+///
+/// Unpack a Soroban map-backed struct object into linear memory and return
+/// a pointer to the start of the unpacked values buffer.
+#[allow(dead_code)]
+pub(crate) fn unpack_map_struct_to_linear_memory(
+    map_object: Expression,
+    struct_no: usize,
+    ns: &Namespace,
+    cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+) -> Expression {
+    let map_obj_no = vartab.temp_name("struct_map_obj", &Type::Uint(64));
+    cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: map_obj_no,
+            expr: map_object,
+        },
+    );
+    let map_obj = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: Type::Uint(64),
+        var_no: map_obj_no,
+    };
+
+    let (keys_buffer, sorted_decl_indices, len_encoded, len_bytes_u32) =
+        build_struct_map_keys_buffer(struct_no, ns, cfg, vartab);
+
+    let buffer_ty = Type::Array(Box::new(Type::Uint(64)), vec![ArrayLength::Dynamic]);
+
+    let values_no = vartab.temp_name("struct_map_vals", &buffer_ty);
+    cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: values_no,
+            expr: Expression::AllocDynamicBytes {
+                loc: Loc::Codegen,
+                ty: buffer_ty.clone(),
+                size: Box::new(len_bytes_u32.clone()),
+                initializer: None,
+            },
+        },
+    );
+
+    let values_buffer = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: buffer_ty.clone(),
+        var_no: values_no,
+    };
+
+    let keys_pos = zext_shift_add(
+        Loc::Codegen,
+        Expression::VectorData {
+            pointer: Box::new(keys_buffer),
+        },
+        32,
+        4,
+    );
+    let vals_pos = zext_shift_add(
+        Loc::Codegen,
+        Expression::VectorData {
+            pointer: Box::new(values_buffer.clone()),
+        },
+        32,
+        4,
+    );
+
+    let unpack_ret = vartab.temp_name("map_unpack_result", &Type::Uint(64));
+    cfg.add(
+        vartab,
+        Instr::Call {
+            res: vec![unpack_ret],
+            return_tys: vec![Type::Uint(64)],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::MapUnpackToLinearMemory.name().to_string(),
+            },
+            args: vec![map_obj, keys_pos, vals_pos, len_encoded],
+        },
+    );
+
+    let reordered_values_no = vartab.temp_name("struct_map_vals_reordered", &buffer_ty);
+    cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: reordered_values_no,
+            expr: Expression::AllocDynamicBytes {
+                loc: Loc::Codegen,
+                ty: buffer_ty.clone(),
+                size: Box::new(len_bytes_u32),
+                initializer: None,
+            },
+        },
+    );
+
+    let reordered_values = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: buffer_ty,
+        var_no: reordered_values_no,
+    };
+
+    for (sorted_index, decl_index) in sorted_decl_indices.iter().enumerate() {
+        let source = Expression::Load {
+            loc: Loc::Codegen,
+            ty: Type::Uint(64),
+            expr: Box::new(Expression::Subscript {
+                loc: Loc::Codegen,
+                ty: Type::Ref(Box::new(Type::Uint(64))),
+                array_ty: values_buffer.ty(),
+                expr: Box::new(values_buffer.clone()),
+                index: Box::new(Expression::NumberLiteral {
+                    loc: Loc::Codegen,
+                    ty: Type::Uint(32),
+                    value: BigInt::from(sorted_index),
+                }),
+            }),
+        };
+
+        cfg.add(
+            vartab,
+            Instr::Store {
+                dest: Expression::Subscript {
+                    loc: Loc::Codegen,
+                    ty: Type::Ref(Box::new(Type::Uint(64))),
+                    array_ty: reordered_values.ty(),
+                    expr: Box::new(reordered_values.clone()),
+                    index: Box::new(Expression::NumberLiteral {
+                        loc: Loc::Codegen,
+                        ty: Type::Uint(32),
+                        value: BigInt::from(*decl_index),
+                    }),
+                },
+                data: source,
+            },
+        );
+    }
+
+    Expression::AdvancePointer {
+        pointer: Box::new(reordered_values),
+        bytes_offset: Box::new(Expression::Subtract {
+            loc: Loc::Codegen,
+            ty: Type::Uint(32),
+            overflowing: false,
+            left: Box::new(Expression::Trunc {
+                loc: Loc::Codegen,
+                ty: Type::Uint(32),
+                expr: Box::new(Expression::Variable {
+                    loc: Loc::Codegen,
+                    ty: Type::Uint(64),
+                    var_no: unpack_ret,
+                }),
+            }),
+            right: Box::new(Expression::Trunc {
+                loc: Loc::Codegen,
+                ty: Type::Uint(32),
+                expr: Box::new(Expression::Variable {
+                    loc: Loc::Codegen,
+                    ty: Type::Uint(64),
+                    var_no: unpack_ret,
+                }),
+            }),
+        }),
+    }
+}
+
+/// Build the key table expected by `map_unpack_to_linear_memory`.
+///
+/// Each entry is one `u64` packed as `(u32 ptr, u32 len)`, where the pointer
+/// targets the UTF-8 bytes of a struct field name in guest linear memory.
+///
+/// The declaration indexes are returned in the same lexicographic order as the
+/// key table so the unpacked values can be reordered back to Solidity field
+/// declaration order.
+fn build_struct_map_keys_buffer(
+    struct_no: usize,
+    ns: &Namespace,
+    cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+) -> (Expression, Vec<usize>, Expression, Expression) {
+    let mut sorted_fields = ns.structs[struct_no]
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(decl_index, field)| (decl_index, field.name_as_str().as_bytes().to_vec()))
+        .collect::<Vec<_>>();
+    sorted_fields.sort_by(|a, b| a.1.cmp(&b.1));
+
+    let sorted_decl_indices = sorted_fields
+        .iter()
+        .map(|(decl_index, _)| *decl_index)
+        .collect::<Vec<_>>();
+
+    let field_count_u32 = Expression::NumberLiteral {
+        loc: Loc::Codegen,
+        ty: Type::Uint(32),
+        value: BigInt::from(sorted_fields.len()),
+    };
+    let len_encoded = zext_shift_add(Loc::Codegen, field_count_u32.clone(), 32, 4);
+
+    let len_bytes_u32 = Expression::Multiply {
+        loc: Loc::Codegen,
+        ty: Type::Uint(32),
+        overflowing: false,
+        left: Box::new(field_count_u32),
+        right: Box::new(Expression::NumberLiteral {
+            loc: Loc::Codegen,
+            ty: Type::Uint(32),
+            value: BigInt::from(8u8),
+        }),
+    };
+
+    let buffer_ty = Type::Array(Box::new(Type::Uint(64)), vec![ArrayLength::Dynamic]);
+    let keys_no = vartab.temp_name("struct_map_keys", &buffer_ty);
+    cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: keys_no,
+            expr: Expression::AllocDynamicBytes {
+                loc: Loc::Codegen,
+                ty: buffer_ty.clone(),
+                size: Box::new(len_bytes_u32.clone()),
+                initializer: None,
+            },
+        },
+    );
+
+    let keys_buffer = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: buffer_ty,
+        var_no: keys_no,
+    };
+
+    for (sorted_index, (_, field_name)) in sorted_fields.iter().enumerate() {
+        let name_bytes_no = vartab.temp_name("struct_map_key_bytes", &Type::DynamicBytes);
+        cfg.add(
+            vartab,
+            Instr::Set {
+                loc: Loc::Codegen,
+                res: name_bytes_no,
+                expr: Expression::AllocDynamicBytes {
+                    loc: Loc::Codegen,
+                    ty: Type::DynamicBytes,
+                    size: Box::new(Expression::NumberLiteral {
+                        loc: Loc::Codegen,
+                        ty: Type::Uint(32),
+                        value: BigInt::from(field_name.len()),
+                    }),
+                    initializer: Some(field_name.clone()),
+                },
+            },
+        );
+
+        let name_buffer = Expression::Variable {
+            loc: Loc::Codegen,
+            ty: Type::DynamicBytes,
+            var_no: name_bytes_no,
+        };
+
+        let ptr_u32 = Expression::Trunc {
+            loc: Loc::Codegen,
+            ty: Type::Uint(32),
+            expr: Box::new(Expression::VectorData {
+                pointer: Box::new(name_buffer),
+            }),
+        };
+
+        let packed_len = Expression::ShiftLeft {
+            loc: Loc::Codegen,
+            ty: Type::Uint(64),
+            left: Box::new(Expression::ZeroExt {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                expr: Box::new(Expression::NumberLiteral {
+                    loc: Loc::Codegen,
+                    ty: Type::Uint(32),
+                    value: BigInt::from(field_name.len()),
+                }),
+            }),
+            right: Box::new(Expression::NumberLiteral {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                value: BigInt::from(32u8),
+            }),
+        };
+
+        let packed_key = Expression::Add {
+            loc: Loc::Codegen,
+            ty: Type::Uint(64),
+            overflowing: false,
+            left: Box::new(Expression::ZeroExt {
+                loc: Loc::Codegen,
+                ty: Type::Uint(64),
+                expr: Box::new(ptr_u32),
+            }),
+            right: Box::new(packed_len),
+        };
+
+        cfg.add(
+            vartab,
+            Instr::WriteBuffer {
+                buf: keys_buffer.clone(),
+                offset: Expression::NumberLiteral {
+                    loc: Loc::Codegen,
+                    ty: Type::Uint(64),
+                    value: BigInt::from((sorted_index * 8) as u64),
+                },
+                value: packed_key,
+            },
+        );
+    }
+
+    (keys_buffer, sorted_decl_indices, len_encoded, len_bytes_u32)
+}
+
+#[allow(dead_code)]
+fn unpack_vecobject_to_linear_memory_raw(
+    vec_object: Expression,
+    cfg: &mut ControlFlowGraph,
+    vartab: &mut Vartable,
+) -> (Expression, Expression, Expression) {
+    let vec_len = vartab.temp_name("raw_vec_len", &Type::Uint(64));
+
+    cfg.add(
+        vartab,
+        Instr::Call {
+            res: vec![vec_len],
+            return_tys: vec![Type::Uint(64)],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecLen.name().to_string(),
+            },
+            args: vec![vec_object.clone()],
+        },
+    );
+
+    let len_var = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: Type::Uint(64),
+        var_no: vec_len,
+    };
+
+    let decoded_len_u64 = Expression::ShiftRight {
+        loc: Loc::Codegen,
+        ty: Type::Uint(64),
+        left: Box::new(len_var.clone()),
+        right: Box::new(Expression::NumberLiteral {
+            loc: Loc::Codegen,
+            ty: Type::Uint(64),
+            value: BigInt::from(32u8),
+        }),
+        signed: false,
+    };
+
+    let decoded_len_u32 = Expression::Trunc {
+        loc: Loc::Codegen,
+        ty: Type::Uint(32),
+        expr: Box::new(decoded_len_u64),
+    };
+
+    let decoded_len_bytes_u32 = Expression::Multiply {
+        loc: Loc::Codegen,
+        ty: Type::Uint(32),
+        overflowing: false,
+        left: Box::new(decoded_len_u32.clone()),
+        right: Box::new(Expression::NumberLiteral {
+            loc: Loc::Codegen,
+            ty: Type::Uint(32),
+            value: BigInt::from(8u8),
+        }),
+    };
+
+    let buffer_ty = Type::Array(Box::new(Type::Uint(64)), vec![ArrayLength::Dynamic]);
+    let decoded_buffer_var = vartab.temp_name("raw_vec_data", &buffer_ty);
+
+    cfg.add(
+        vartab,
+        Instr::Set {
+            loc: Loc::Codegen,
+            res: decoded_buffer_var,
+            expr: Expression::AllocDynamicBytes {
+                loc: Loc::Codegen,
+                ty: buffer_ty.clone(),
+                size: Box::new(decoded_len_bytes_u32),
+                initializer: None,
+            },
+        },
+    );
+
+    let decoded_buffer = Expression::Variable {
+        loc: Loc::Codegen,
+        ty: buffer_ty,
+        var_no: decoded_buffer_var,
+    };
+
+    let data_location = zext_shift_add(
+        Loc::Codegen,
+        Expression::VectorData {
+            pointer: Box::new(decoded_buffer.clone()),
+        },
+        32,
+        4,
+    );
+
+    let unused = vartab.temp_name("unused_void_return", &Type::Uint(64));
+    cfg.add(
+        vartab,
+        Instr::Call {
+            res: vec![unused],
+            return_tys: vec![Type::Uint(64)],
+            call: InternalCallTy::HostFunction {
+                name: HostFunctions::VecUnpackToLinearMemory.name().to_string(),
+            },
+            args: vec![vec_object, data_location, len_var.clone()],
+        },
+    );
+
+    (decoded_buffer, len_var, decoded_len_u32)
 }
 
 fn zext_shift_add(loc: pt::Loc, value: Expression, shift: u64, tag: u64) -> Expression {
@@ -1798,6 +2254,7 @@ fn decode_vector(
     cfg: &mut ControlFlowGraph,
     vartab: &mut Vartable,
 ) -> Expression {
+    println!("decoding vector with object expression: {:?}", vec_object);
     let vec_len = vartab.temp_name("vec_len", &Type::Uint(64));
 
     // Get the length of the vector by VecLen (returns U32Val in a 64-bit host object).
@@ -1844,15 +2301,13 @@ fn decode_vector(
     let decoded_buffer_var = vartab.temp_name("vector_data_decoded", &decoded_array_ty);
     cfg.add(
         vartab,
-        Instr::Set {
-            loc: Loc::Codegen,
-            res: decoded_buffer_var,
-            expr: Expression::AllocDynamicBytes {
-                loc: Loc::Codegen,
-                ty: decoded_array_ty.clone(),
-                size: Box::new(decoded_len_u32.clone()),
-                initializer: None,
+        Instr::Call {
+            res: vec![decoded_buffer_var],
+            return_tys: vec![decoded_array_ty.clone()],
+            call: crate::codegen::cfg::InternalCallTy::HostFunction {
+                name: "soroban_alloc_vals".to_string(),
             },
+            args: vec![decoded_len_u32.clone()],
         },
     );
 

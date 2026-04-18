@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use super::encoding::soroban_encoding::{soroban_decode_arg, soroban_encode_arg};
+use super::encoding::soroban_encoding::{
+    soroban_decode_arg, soroban_encode_arg, unpack_map_struct_to_linear_memory,
+};
 use super::encoding::{abi_decode, abi_encode, soroban_encoding::soroban_encode};
 use super::revert::{
     assert_failure, expr_assert, log_runtime_error, require, PanicCode, SolidityError,
 };
+use super::soroban::{soroban_vec_new, soroban_vec_push_back};
 use super::storage::{
     array_offset, array_pop, array_push, storage_slots_array_pop, storage_slots_array_push,
 };
@@ -684,6 +687,24 @@ pub fn expression(
                     // Therefore instead of adding the offset we insert it as a separate argument.
 
                     let soroban_key = expression(var, cfg, contract_no, func, ns, vartab, opt);
+                    let soroban_key = if matches!(var.as_ref(), ast::Expression::StorageVariable { .. })
+                    {
+                        let key_vec_ty =
+                            Type::Array(Box::new(Type::Uint(32)), vec![ArrayLength::Dynamic]);
+                        let empty_vec = soroban_vec_new(loc, &key_vec_ty, cfg, vartab);
+
+                        soroban_vec_push_back(
+                            loc,
+                            empty_vec,
+                            &key_vec_ty,
+                            soroban_key.cast(&Type::Uint(32), ns),
+                            cfg,
+                            ns,
+                            vartab,
+                        )
+                    } else {
+                        soroban_key
+                    };
 
                     let offset = Expression::NumberLiteral {
                         loc: *loc,
@@ -735,9 +756,19 @@ pub fn expression(
             expr: var,
             field: member,
         } => {
-            let readonly = if let Type::Struct(struct_type) = var.ty().deref_memory() {
+            let var_ty = var.ty();
+            let base_ty = var_ty.deref_memory();
+
+            let readonly = if let Type::Struct(struct_type) = base_ty {
                 let definition = struct_type.definition(ns);
                 definition.fields[*member].readonly
+            } else if let Type::SorobanHandle(inner) = base_ty {
+                if let Type::Struct(struct_type) = inner.as_ref() {
+                    let definition = struct_type.definition(ns);
+                    definition.fields[*member].readonly
+                } else {
+                    false
+                }
             } else {
                 false
             };
@@ -748,14 +779,33 @@ pub fn expression(
                 ty.clone()
             };
 
+            let mut expr = expression(var, cfg, contract_no, func, ns, vartab, opt);
+
+            // For Soroban handle-backed structs (e.g. array elements), decode the base
+            // struct before taking a member pointer.
+            if ns.target == Target::Soroban {
+                if let Type::Ref(inner) = expr.ty() {
+                    if inner.is_soroban_handle() {
+                        let load_handle = Expression::Load {
+                            loc: *loc,
+                            ty: inner.as_ref().clone(),
+                            expr: Box::new(expr),
+                        };
+                        println!("decoding struct member of {:?}", load_handle);
+
+                        expr = soroban_decode_arg(load_handle, cfg, vartab, ns, None);
+                    }
+                }
+            }
+
             let member_ptr = Expression::StructMember {
                 loc: *loc,
                 ty: member_ty,
-                expr: Box::new(expression(var, cfg, contract_no, func, ns, vartab, opt)),
+                expr: Box::new(expr),
                 member: *member,
             };
 
-            if readonly {
+            let ret = if readonly {
                 Expression::Load {
                     loc: *loc,
                     ty: ty.clone(),
@@ -763,7 +813,9 @@ pub fn expression(
                 }
             } else {
                 member_ptr
-            }
+            };
+
+            ret
         }
         ast::Expression::StringCompare { loc, left, right } => Expression::StringCompare {
             loc: *loc,
@@ -859,11 +911,11 @@ pub fn expression(
         },
         ast::Expression::Load { loc, ty, expr: e } => {
             let expr = Box::new(expression(e, cfg, contract_no, func, ns, vartab, opt));
-
             // Soroban lazy decode path: if memory contains encoded handles, decode on demand.
             if ns.target == Target::Soroban {
+                println!("loading from expr {:?}", expr);
                 if let Type::Ref(inner) = expr.ty() {
-                    if matches!(inner.as_ref(), Type::SorobanHandle(_)) {
+                    if inner.is_soroban_handle() {
                         let load_handle = Expression::Load {
                             loc: *loc,
                             ty: inner.as_ref().clone(),
@@ -3232,8 +3284,17 @@ pub fn assign_single(
     vartab: &mut Vartable,
     opt: &Options,
 ) -> Expression {
+    println!("left ty {:?} \n and right ty {:?}", left, cfg_right );
     match left {
         ast::Expression::Variable { loc, ty, var_no } => {
+            let rhs_ty = cfg_right.ty();
+
+            if ns.target == Target::Soroban && rhs_ty.has_soroban_handle() {
+                if let Some(slot) = vartab.vars.get_mut(var_no) {
+                    slot.ty = rhs_ty.clone();
+                }
+            }
+
             cfg.add(
                 vartab,
                 Instr::Set {
@@ -3245,7 +3306,11 @@ pub fn assign_single(
 
             Expression::Variable {
                 loc: *loc,
-                ty: ty.clone(),
+                ty: vartab
+                    .vars
+                    .get(var_no)
+                    .map(|v| v.ty.clone())
+                    .unwrap_or_else(|| ty.clone()),
                 var_no: *var_no,
             }
         }
@@ -3317,14 +3382,46 @@ pub fn assign_single(
                     };
 
                     if ns.target == Target::Soroban {
-                        value = soroban_encode_arg(value, cfg, vartab, ns);
+                        value = match (left_ty.deref_any(), ty.deref_any()) {
+                            (
+                                Type::Struct(StructType::UserDefined(struct_no)),
+                                Type::SorobanHandle(inner),
+                            ) if matches!(
+                                inner.as_ref(),
+                                Type::Struct(StructType::UserDefined(inner_struct_no))
+                                    if inner_struct_no == struct_no
+                            ) =>
+                            {
+                                let loaded_value = Expression::Load {
+                                    loc: Loc::Codegen,
+                                    ty: ty.deref_any().clone(),
+                                    expr: Box::new(value),
+                                };
+
+                                match unpack_map_struct_to_linear_memory(
+                                    loaded_value,
+                                    *struct_no,
+                                    ns,
+                                    cfg,
+                                    vartab,
+                                ) {
+                                    Expression::AdvancePointer { pointer, .. } => *pointer,
+                                    _ => unreachable!(),
+                                }
+                            }
+                            _ => soroban_encode_arg(value, cfg, vartab, ns),
+                        };
                     }
 
                     cfg.add(
                         vartab,
                         Instr::SetStorage {
                             value,
-                            ty: ty.deref_any().clone(),
+                            ty: if ns.target == Target::Soroban {
+                                left_ty.deref_any().clone()
+                            } else {
+                                ty.deref_any().clone()
+                            },
                             storage: dest,
                             storage_type,
                         },
@@ -3332,10 +3429,8 @@ pub fn assign_single(
                 }
                 Type::Ref(_) => {
                     let data = if ns.target == Target::Soroban
-                        && matches!(
-                            dest.ty(),
-                            Type::Ref(inner) if matches!(inner.as_ref(), Type::SorobanHandle(_))
-                        ) {
+                        && dest.ty().is_soroban_handle()
+                    {
                         soroban_encode_arg(
                             Expression::Variable {
                                 loc: Loc::Codegen,
@@ -4233,7 +4328,7 @@ fn array_subscript(
 
         if ns.target == Target::Soroban {
             if let Type::Array(runtime_elem_ty, runtime_dims) = array.ty().deref_any() {
-                if matches!(runtime_elem_ty.as_ref(), Type::SorobanHandle(_)) {
+                if runtime_elem_ty.as_ref().is_soroban_handle() {
                     effective_array_ty = Type::Array(runtime_elem_ty.clone(), runtime_dims.clone());
                     effective_elem_ty = if matches!(elem_ty, Type::Ref(_)) {
                         Type::Ref(runtime_elem_ty.clone())

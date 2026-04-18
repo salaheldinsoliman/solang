@@ -1875,6 +1875,21 @@ impl Type {
         }
     }
 
+    /// Is this type a `SorobanHandle`, possibly wrapped under ref/array/slice wrappers?
+    pub fn is_soroban_handle(&self) -> bool {
+        match self {
+            Type::SorobanHandle(_) => true,
+            Type::Ref(inner) | Type::StorageRef(_, inner) => inner.is_soroban_handle(),
+            Type::Array(inner, _) | Type::Slice(inner) => inner.is_soroban_handle(),
+            _ => false,
+        }
+    }
+
+    /// Does this type contain a `SorobanHandle`, possibly under wrappers?
+    pub fn has_soroban_handle(&self) -> bool {
+        self.is_soroban_handle()
+    }
+
     /// Does this type contain any types which are variable-length
     pub fn is_dynamic(&self, ns: &Namespace) -> bool {
         self.is_dynamic_internal(ns, &mut HashSet::new())

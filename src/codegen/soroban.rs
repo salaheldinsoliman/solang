@@ -50,7 +50,7 @@ pub(super) fn soroban_vec_new(
     empty_vec_var
 }
 
-fn soroban_vec_push_back(
+pub(super) fn soroban_vec_push_back(
     loc: &pt::Loc,
     vec_obj: Expression,
     vec_ty: &Type,

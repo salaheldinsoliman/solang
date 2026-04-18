@@ -129,8 +129,6 @@ pub fn storage_slots_array_push(
 
     let elem_ty = args[0].ty().storage_array_elem();
 
-    let entry_pos = vartab.temp_anonymous(&slot_ty);
-
     let array_offset = if ns.target == Target::Soroban {
         let index = Expression::Variable {
             loc: *loc,
@@ -143,7 +141,7 @@ pub fn storage_slots_array_push(
         Expression::Subscript {
             loc: *loc,
             ty: elem_ty.clone(),
-            array_ty: Type::StorageRef(false, Box::new(elem_ty.clone())),
+            array_ty: args[0].ty().clone(),
             expr: Box::new(var_expr.clone()),
             index: Box::new(index_encoded),
         }
@@ -165,14 +163,29 @@ pub fn storage_slots_array_push(
         )
     };
 
-    cfg.add(
-        vartab,
-        Instr::Set {
-            loc: pt::Loc::Codegen,
-            res: entry_pos,
-            expr: array_offset,
-        },
-    );
+    let mut entry_pos = None;
+
+    let storage = if ns.target == Target::Soroban {
+        array_offset.clone()
+    } else {
+        let pos = vartab.temp_anonymous(&slot_ty);
+        entry_pos = Some(pos);
+
+        cfg.add(
+            vartab,
+            Instr::Set {
+                loc: pt::Loc::Codegen,
+                res: pos,
+                expr: array_offset.clone(),
+            },
+        );
+
+        Expression::Variable {
+            loc: *loc,
+            ty: slot_ty.clone(),
+            var_no: pos,
+        }
+    };
 
     if args.len() == 2 {
         let mut value = expression(&args[1], cfg, contract_no, func, ns, vartab, opt);
@@ -186,11 +199,7 @@ pub fn storage_slots_array_push(
             Instr::SetStorage {
                 ty: elem_ty.clone(),
                 value,
-                storage: Expression::Variable {
-                    loc: *loc,
-                    ty: slot_ty.clone(),
-                    var_no: entry_pos,
-                },
+                storage: storage.clone(),
                 storage_type: None,
             },
         );
@@ -228,10 +237,14 @@ pub fn storage_slots_array_push(
     );
 
     if args.len() == 1 {
-        Expression::Variable {
-            loc: *loc,
-            ty: elem_ty,
-            var_no: entry_pos,
+        if ns.target == Target::Soroban {
+            array_offset
+        } else {
+            Expression::Variable {
+                loc: *loc,
+                ty: elem_ty,
+                var_no: entry_pos.unwrap(),
+            }
         }
     } else {
         Expression::Poison
@@ -354,8 +367,6 @@ pub fn storage_slots_array_pop(
     // The array element will be loaded before clearing. So, the return
     // type of pop() is the derefenced array dereference
     let elem_ty = ty.storage_array_elem().deref_any().clone();
-    let entry_pos = vartab.temp_anonymous(&slot_ty);
-
     let array_offset_expr = if ns.target == Target::Soroban {
         let index = Expression::Variable {
             loc: *loc,
@@ -368,7 +379,7 @@ pub fn storage_slots_array_pop(
         Expression::Subscript {
             loc: *loc,
             ty: elem_ty.clone(),
-            array_ty: Type::StorageRef(false, Box::new(elem_ty.clone())),
+            array_ty: args[0].ty().clone(),
             expr: Box::new(var_expr.clone()),
             index: Box::new(index_encoded),
         }
@@ -390,14 +401,26 @@ pub fn storage_slots_array_pop(
         )
     };
 
-    cfg.add(
-        vartab,
-        Instr::Set {
-            loc: pt::Loc::Codegen,
-            res: entry_pos,
-            expr: array_offset_expr,
-        },
-    );
+    let storage = if ns.target == Target::Soroban {
+        array_offset_expr.clone()
+    } else {
+        let entry_pos = vartab.temp_anonymous(&slot_ty);
+
+        cfg.add(
+            vartab,
+            Instr::Set {
+                loc: pt::Loc::Codegen,
+                res: entry_pos,
+                expr: array_offset_expr.clone(),
+            },
+        );
+
+        Expression::Variable {
+            loc: *loc,
+            ty: slot_ty.clone(),
+            var_no: entry_pos,
+        }
+    };
 
     let val = if *return_ty != Type::Void {
         let res_pos = vartab.temp_anonymous(&elem_ty);
@@ -405,11 +428,7 @@ pub fn storage_slots_array_pop(
         let expr = load_storage(
             loc,
             &elem_ty,
-            Expression::Variable {
-                loc: *loc,
-                ty: elem_ty.clone(),
-                var_no: entry_pos,
-            },
+            storage.clone(),
             cfg,
             vartab,
             None,
@@ -439,11 +458,7 @@ pub fn storage_slots_array_pop(
         vartab,
         Instr::ClearStorage {
             ty: elem_ty,
-            storage: Expression::Variable {
-                loc: *loc,
-                ty: slot_ty.clone(),
-                var_no: entry_pos,
-            },
+            storage,
         },
     );
 
