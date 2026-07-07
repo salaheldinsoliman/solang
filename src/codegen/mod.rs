@@ -1,53 +1,48 @@
 // SPDX-License-Identifier: Apache-2.0
 
-mod array_boundary;
 pub mod cfg;
-mod constant_folding;
 mod constructor;
-mod dead_storage;
-pub(crate) mod dispatch;
-pub(crate) mod encoding;
-mod events;
+pub(crate) use targets::abi as encoding;
+pub(crate) mod error;
 mod expression;
-pub(super) mod polkadot;
-mod reaching_definitions;
+mod interface;
+mod optimize;
+pub(crate) use optimize::array_boundary;
+pub(crate) use optimize::constant_folding;
+pub(crate) use optimize::dead_storage;
+pub(crate) use optimize::reaching_definitions;
+pub(crate) use optimize::strength_reduce;
+pub(crate) use optimize::subexpression_elimination;
+pub(crate) use optimize::undefined_variable;
+pub(crate) use optimize::unused_variable;
+pub(crate) use optimize::vector_to_slice;
 pub mod revert;
-mod solana_accounts;
-mod solana_deploy;
-mod soroban;
-mod statements;
+pub(crate) mod statements;
 mod storage;
-mod strength_reduce;
-pub(crate) mod subexpression_elimination;
+pub(crate) mod targets;
 mod tests;
-mod undefined_variable;
-mod unused_variable;
 pub(crate) mod vartable;
-mod vector_to_slice;
 mod yul;
 
 use self::{
     cfg::{optimize_and_check_cfg, ControlFlowGraph, Instr},
-    dispatch::function_dispatch,
     expression::expression,
-    solana_accounts::account_collection::collect_accounts_from_contract,
+    interface::TargetCodegen,
     vartable::Vartable,
 };
 use crate::sema::ast::{
-    ArrayLength, FormatArg, Function, Layout, Namespace, RetrieveType, StringLocation, Type,
+    FormatArg, Function, Layout, Namespace, RetrieveType, StringLocation, Type,
 };
 use crate::{sema::ast, Target};
 use std::cmp::Ordering;
 
 use crate::codegen::cfg::ASTFunction;
-use crate::codegen::solana_accounts::account_management::manage_contract_accounts;
 use crate::codegen::yul::generate_yul_function_cfg;
 use crate::sema::diagnostics::Diagnostics;
 use crate::sema::eval::eval_const_number;
 use crate::sema::Recurse;
 #[cfg(feature = "wasm_opt")]
 use contract_build::OptimizationPasses;
-use encoding::soroban_encoding::soroban_encode_arg;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use num_traits::{FromPrimitive, Zero};
@@ -106,6 +101,7 @@ pub enum HostFunctions {
     LogFromLinearMemory,
     SymbolNewFromLinearMemory,
     VectorNew,
+    BytesNew,
     VectorNewFromLinearMemory,
     VecUnpackToLinearMemory,
     VecLen,
@@ -144,6 +140,13 @@ pub enum HostFunctions {
     BytesNewFromLinearMemory,
     BytesLen,
     BytesCopyToLinearMemory,
+    BytesGet,
+    BytesPut,
+    BytesPush,
+    BytesPop,
+    StringLen,
+    StringCopyToLinearMemory,
+    ContractEvent,
 }
 
 impl HostFunctions {
@@ -158,6 +161,7 @@ impl HostFunctions {
             HostFunctions::LogFromLinearMemory => "x._",
             HostFunctions::SymbolNewFromLinearMemory => "b.j",
             HostFunctions::VectorNew => "v._",
+            HostFunctions::BytesNew => "b.4",
             HostFunctions::VectorNewFromLinearMemory => "v.g",
             HostFunctions::VecUnpackToLinearMemory => "v.h",
             HostFunctions::Call => "d._",
@@ -192,6 +196,13 @@ impl HostFunctions {
             HostFunctions::BytesNewFromLinearMemory => "b.3",
             HostFunctions::BytesLen => "b.8",
             HostFunctions::BytesCopyToLinearMemory => "b.1",
+            HostFunctions::BytesGet => "b.6",
+            HostFunctions::BytesPut => "b.5",
+            HostFunctions::BytesPush => "b.9",
+            HostFunctions::BytesPop => "b.a",
+            HostFunctions::StringLen => "b.k",
+            HostFunctions::StringCopyToLinearMemory => "b.g",
+            HostFunctions::ContractEvent => "x.1",
             HostFunctions::VecLen => "v.3",
             HostFunctions::VecPopBack => "v.7",
             HostFunctions::VecGet => "v.1",
@@ -244,6 +255,8 @@ pub fn codegen(ns: &mut Namespace, opt: &Options) {
         return;
     }
 
+    let target = targets::make_target(ns);
+
     let mut contracts_done = Vec::new();
 
     contracts_done.resize(ns.contracts.len(), false);
@@ -269,7 +282,7 @@ pub fn codegen(ns: &mut Namespace, opt: &Options) {
                 continue;
             }
 
-            contract(contract_no, ns, opt);
+            contract(contract_no, ns, opt, target.as_ref());
 
             if ns.diagnostics.any_errors() {
                 return;
@@ -279,26 +292,18 @@ pub fn codegen(ns: &mut Namespace, opt: &Options) {
         }
     }
 
-    if ns.target == Target::Solana {
-        for contract_no in 0..ns.contracts.len() {
-            if ns.contracts[contract_no].instantiable {
-                let diag = collect_accounts_from_contract(contract_no, ns);
-                ns.diagnostics.extend(diag);
-            }
-        }
+    target.post_process_program(ns, opt);
 
-        for contract_no in 0..ns.contracts.len() {
-            if ns.contracts[contract_no].instantiable {
-                manage_contract_accounts(contract_no, ns);
-            }
-        }
-    }
     ns.diagnostics.sort_and_dedup();
 }
 
-fn contract(contract_no: usize, ns: &mut Namespace, opt: &Options) {
+fn contract(contract_no: usize, ns: &mut Namespace, opt: &Options, target: &dyn TargetCodegen) {
     if !ns.diagnostics.any_errors() && ns.contracts[contract_no].instantiable {
-        layout(contract_no, ns);
+        layout(contract_no, ns, target);
+        target.validate_contract(contract_no, ns);
+        if ns.diagnostics.any_errors() {
+            return;
+        }
 
         let mut cfg_no = 0;
         let mut all_cfg = Vec::new();
@@ -332,16 +337,17 @@ fn contract(contract_no: usize, ns: &mut Namespace, opt: &Options) {
                 &mut all_cfg,
                 ns,
                 opt,
+                target,
             )
         }
 
         // generate the cfg for yul functions
         for yul_func_no in ns.contracts[contract_no].yul_functions.clone() {
-            generate_yul_function_cfg(contract_no, yul_func_no, &mut all_cfg, ns, opt);
+            generate_yul_function_cfg(contract_no, yul_func_no, &mut all_cfg, ns, opt, target);
         }
 
         // Generate cfg for storage initializers
-        let cfg = storage_initializer(contract_no, ns, opt);
+        let cfg = storage_initializer(contract_no, ns, opt, target);
         let pos = all_cfg.len();
         all_cfg.push(cfg);
         ns.contracts[contract_no].initializer = Some(pos);
@@ -352,12 +358,17 @@ fn contract(contract_no: usize, ns: &mut Namespace, opt: &Options) {
             let cfg_no = all_cfg.len();
             all_cfg.push(ControlFlowGraph::placeholder());
 
-            cfg::generate_cfg(contract_no, None, cfg_no, &mut all_cfg, ns, opt);
+            cfg::generate_cfg(contract_no, None, cfg_no, &mut all_cfg, ns, opt, target);
 
             ns.contracts[contract_no].default_constructor = Some((func, cfg_no));
         }
 
-        for mut dispatch_cfg in function_dispatch(contract_no, &mut all_cfg, ns, opt) {
+        target.validate_cfgs(&all_cfg, ns);
+        if ns.diagnostics.any_errors() {
+            return;
+        }
+
+        for mut dispatch_cfg in target.function_dispatch(contract_no, &mut all_cfg, ns, opt) {
             optimize_and_check_cfg(&mut dispatch_cfg, ns, ASTFunction::None, opt);
             all_cfg.push(dispatch_cfg);
         }
@@ -367,7 +378,12 @@ fn contract(contract_no: usize, ns: &mut Namespace, opt: &Options) {
 }
 
 /// This function will set all contract storage initializers and should be called from the constructor
-fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) -> ControlFlowGraph {
+fn storage_initializer(
+    contract_no: usize,
+    ns: &mut Namespace,
+    opt: &Options,
+    target: &dyn TargetCodegen,
+) -> ControlFlowGraph {
     // note the single `:` to prevent a name clash with user-declared functions
     let mut cfg = ControlFlowGraph::new(STORAGE_INITIALIZER.to_string(), ASTFunction::None);
     let mut vartab = Vartable::new(ns.next_id);
@@ -375,19 +391,21 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
     for layout in &ns.contracts[contract_no].layout {
         let var = &ns.contracts[layout.contract_no].variables[layout.var_no];
 
-        let soroban_init_with_vec = ns.target == Target::Soroban
-            && match &var.ty {
-                Type::String | Type::DynamicBytes | Type::Slice(_) => true,
-                Type::Array(elem_ty, dims) if dims.last() == Some(&ArrayLength::Dynamic) => {
-                    !elem_ty.is_reference_type(ns)
-                }
-                _ => false,
-            };
-
         let mut value = if let Some(init) = &var.initializer {
-            expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt)
-        } else if soroban_init_with_vec {
-            soroban::soroban_vec_new(&var.loc, &var.ty, &mut cfg, &mut vartab)
+            expression(
+                init,
+                &mut cfg,
+                contract_no,
+                None,
+                ns,
+                &mut vartab,
+                opt,
+                target,
+            )
+        } else if let Some(default) =
+            target.default_storage_value(&var.loc, &var.ty, &mut cfg, &mut vartab, ns)
+        {
+            default
         } else {
             continue;
         };
@@ -400,11 +418,7 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
             None,
         );
 
-        //let mut value = expression(init, &mut cfg, contract_no, None, ns, &mut vartab, opt);
-
-        if ns.target == Target::Soroban {
-            value = soroban_encode_arg(value, &mut cfg, &mut vartab, ns);
-        }
+        value = target.prepare_storage_value(value, &storage, &mut cfg, &mut vartab, ns);
 
         cfg.add(
             &mut vartab,
@@ -427,28 +441,14 @@ fn storage_initializer(contract_no: usize, ns: &mut Namespace, opt: &Options) ->
 }
 
 /// Layout the contract. We determine the layout of variables and deal with overriding variables
-fn layout(contract_no: usize, ns: &mut Namespace) {
-    let mut slot = if ns.target == Target::Solana {
-        BigInt::from(SOLANA_FIRST_OFFSET)
-    } else {
-        BigInt::zero()
-    };
+fn layout(contract_no: usize, ns: &mut Namespace, target: &dyn TargetCodegen) {
+    let mut slot = target.initial_storage_slot();
 
     for base_contract_no in ns.contract_bases(contract_no) {
         for var_no in 0..ns.contracts[base_contract_no].variables.len() {
             if !ns.contracts[base_contract_no].variables[var_no].constant {
                 let ty = ns.contracts[base_contract_no].variables[var_no].ty.clone();
-
-                if ns.target == Target::Solana {
-                    // elements need to be aligned on solana
-                    let alignment = ty.align_of(ns);
-
-                    let offset = slot.clone() % alignment;
-
-                    if offset > BigInt::zero() {
-                        slot += alignment - offset;
-                    }
-                }
+                slot = target.align_storage_slot(slot, &ty, ns);
 
                 ns.contracts[contract_no].layout.push(Layout {
                     slot: slot.clone(),
